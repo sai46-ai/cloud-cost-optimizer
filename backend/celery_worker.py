@@ -1,4 +1,4 @@
-from app.tasks.scheduled import celery_app
+from app.celery_worker import celery_app
 
 if __name__ == "__main__":
     celery_app.start()

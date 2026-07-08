@@ -1,0 +1,9 @@
+mypy==1.10.0
+pytest==8.2.0
+pandas-stubs==2.2.1.240316
+types-passlib==1.7.7.20240327
+types-python-jose==3.3.4.20240106
+types-PyYAML==6.0.12.20240311
+types-redis==4.6.0.20240425
+types-requests==2.31.0.20240406
+sqlalchemy2-stubs==0.0.2-alpha.37
