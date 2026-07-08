@@ -6,8 +6,29 @@ __pycache__/
 .env
 *.env
 venv/
+.venv/
 .envrc
 .costopt.db
+cloudwise.db*
+*.db
+*.db-shm
+*.db-wal
+
+# Node/Builds
+node_modules/
+dist/
+build/
+.next/
+coverage/
+.mypy_cache/
+.pytest_cache/
+.cache/
+.vite/
+.turbo/
+.parcel-cache/
+ruff_cache/
+tmp/
+temp/
 
 # VSCode
 .vscode/
@@ -19,9 +40,10 @@ Thumbs.db
 # Jupyter
 .ipynb_checkpoints/
 
-# Reports
+# Reports (generated output)
 *.pdf
 *.csv
+static/reports/
 
 # Logs
 *.log
@@ -29,3 +51,13 @@ Thumbs.db
 # Celery
 celerybeat-schedule
 celerybeat.pid
+
+# Security
+*.pem
+*.key
+
+# IDEs
+.idea/
+
+# Logs directory
+logs/
