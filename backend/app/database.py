@@ -76,4 +76,5 @@ def get_db() -> Generator[Session, None, None]:
 
 def init_db() -> None:
     """Create all database tables. Used for development / initial setup."""
+    import app.models  # Ensure models are registered on Base metadata
     Base.metadata.create_all(bind=engine)

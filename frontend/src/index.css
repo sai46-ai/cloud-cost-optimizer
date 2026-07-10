@@ -35,22 +35,29 @@
     --bg-primary: #0b0f19;
     --bg-secondary: #111625;
     --bg-elevated: #1a2035;
+    --bg-card: #1a2035;
+    --bg-card-hover: #222b48;
+    --bg-tertiary: #141a2e;
+    --bg-input: #0b0f19;
 
     /* Text - Off-white compliant */
     --text-primary: #FAFAFA;
     --text-secondary: #d1d5db;
     /* gray-300 */
     --text-muted: #9ca3af;
+    --text-tertiary: #9ca3af;
 
     /* Accent Colors */
     --accent-primary: #2563eb;
     --accent-primary-hover: #1d4ed8;
+    --accent-primary-rgb: 37, 99, 235;
     --accent-cyan: #06b6d4;
     --accent-emerald: #10b981;
 
     /* UI Elements */
     --border-primary: rgba(250, 250, 250, 0.2);
     --border-subtle: rgba(250, 250, 250, 0.1);
+    --border-secondary: rgba(250, 250, 250, 0.1);
 
     /* Status Colors */
     --success: #10b981;
@@ -66,6 +73,10 @@
     /* Slightly darker gray background */
     --bg-elevated: #f9fafb;
     /* Card background - off-white */
+    --bg-card: #f9fafb;
+    --bg-card-hover: #f1f5f9;
+    --bg-tertiary: #f1f5f9;
+    --bg-input: #ffffff;
 
     /* Text */
     --text-primary: #0f172a;
@@ -74,17 +85,20 @@
     /* Slate-700 */
     --text-muted: #64748b;
     /* Slate-500 */
+    --text-tertiary: #64748b;
 
     /* Accent Colors */
     --accent-primary: #2563eb;
     /* Blue-600 */
     --accent-primary-hover: #1d4ed8;
+    --accent-primary-rgb: 37, 99, 235;
     --accent-cyan: #0891b2;
     --accent-emerald: #059669;
 
     /* UI Elements */
     --border-primary: rgba(15, 23, 42, 0.15);
     --border-subtle: rgba(15, 23, 42, 0.08);
+    --border-secondary: rgba(15, 23, 42, 0.08);
 
     /* Status Colors */
     --success: #10b981;

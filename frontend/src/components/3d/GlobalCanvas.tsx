@@ -2,6 +2,7 @@ import React, { useRef, useMemo, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Environment, Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
+import useStore from '../../store';
 
 // ─── Subtle idle camera drift ──────────────────────────────────────────────
 function CameraDrift() {
@@ -253,13 +254,14 @@ function CloudInfrastructureScene() {
 }
 
 // ─── Gradient sky plane ───────────────────────────────────────────────────
-function SkyGradient() {
+function SkyGradient({ theme }: { theme: 'dark' | 'light' }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const material = useMemo(() => {
+    const isDark = theme === 'dark';
     return new THREE.ShaderMaterial({
       uniforms: {
-        uColorTop: { value: new THREE.Color('#dbeafe') },    // light blue
-        uColorBottom: { value: new THREE.Color('#f0f7ff') }, // near white
+        uColorTop: { value: new THREE.Color(isDark ? '#04060d' : '#dbeafe') },
+        uColorBottom: { value: new THREE.Color(isDark ? '#0b0f19' : '#f0f7ff') },
       },
       vertexShader: `
         precision mediump float;
@@ -281,7 +283,7 @@ function SkyGradient() {
       side: THREE.BackSide,
       depthWrite: false,
     });
-  }, []);
+  }, [theme]);
 
   useEffect(() => {
     return () => {
@@ -300,6 +302,7 @@ import { isWebGLAvailable } from '../../lib/utils';
 
 // ─── Exported GlobalCanvas ─────────────────────────────────────────────────
 export function GlobalCanvas() {
+  const { theme } = useStore();
   const hasWebGL = useMemo(() => isWebGLAvailable(), []);
 
   if (!hasWebGL) {
@@ -312,7 +315,9 @@ export function GlobalCanvas() {
           height: '100vh',
           zIndex: 0,
           pointerEvents: 'none',
-          background: 'linear-gradient(to top, #f0f7ff 0%, #dbeafe 100%)',
+          background: theme === 'dark' 
+            ? 'linear-gradient(to top, #0b0f19 0%, #04060d 100%)'
+            : 'linear-gradient(to top, #f0f7ff 0%, #dbeafe 100%)',
         }}
       />
     );
@@ -341,7 +346,7 @@ export function GlobalCanvas() {
         style={{ background: 'transparent' }}
       >
         {/* Gradient background sky */}
-        <SkyGradient />
+        <SkyGradient theme={theme} />
 
         {/* Ambient lighting — soft, neutral */}
         <ambientLight intensity={1.2} color="#f0f4ff" />

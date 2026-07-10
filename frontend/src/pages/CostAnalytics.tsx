@@ -279,11 +279,15 @@ export default function CostAnalytics() {
       {/* Filter Modal Dialog */}
       <AnimatePresence>
         {showFilterModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={() => setShowFilterModal(false)}
+          >
             <motion.div 
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
               className="w-full max-w-md bg-background-card border border-border-primary rounded-xl relative shadow-2xl p-6"
             >
               <button className="absolute top-4 right-4 text-text-muted hover:text-text-primary" onClick={() => setShowFilterModal(false)}>

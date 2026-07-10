@@ -67,6 +67,13 @@ class AuthService:
         )
         self.user_repo.create(user)
 
+        # Auto-seed financial records for new registration to display rich dashboards
+        try:
+            from seed import seed_user_data
+            seed_user_data(user, self.db)
+        except Exception as e:
+            logger.warning("Failed to auto-seed user data: %s", e)
+
         return self._generate_tokens(user)
 
     def login(self, email: str, password: str) -> dict:

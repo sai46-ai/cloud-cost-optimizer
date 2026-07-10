@@ -20,6 +20,45 @@ export default function Header() {
   const notifRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const menuItemsRef = useRef<(HTMLButtonElement | null)[]>([]);
+  const avatarButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Focus navigation hooks
+  useEffect(() => {
+    if (!showUserMenu) {
+      setFocusedIndex(-1);
+    }
+  }, [showUserMenu]);
+
+  useEffect(() => {
+    if (focusedIndex >= 0 && menuItemsRef.current[focusedIndex]) {
+      menuItemsRef.current[focusedIndex]?.focus();
+    }
+  }, [focusedIndex]);
+
+  const handleDropdownKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedIndex(prev => (prev + 1) % 5);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedIndex(prev => (prev - 1 + 5) % 5);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowUserMenu(false);
+      avatarButtonRef.current?.focus();
+    }
+  };
+
+  const handleAvatarKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setShowUserMenu(true);
+      setFocusedIndex(0);
+    }
+  };
+
   // Close dropdowns on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -240,47 +279,123 @@ export default function Header() {
         {/* User Menu */}
         <div className="relative" ref={userMenuRef}>
           <button
-            className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-[#FAFAFA] font-medium cursor-pointer shadow-sm border-2 border-transparent hover:border-[var(--accent-primary)] transition-all"
+            ref={avatarButtonRef}
+            className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-[#FAFAFA] font-medium cursor-pointer shadow-sm border-2 border-transparent hover:border-[var(--accent-primary)] transition-all focus:outline-none focus:ring-2 focus:ring-accent-primary"
             onClick={() => { setShowUserMenu(!showUserMenu); setShowNotifications(false); }}
+            onKeyDown={handleAvatarKeyDown}
             aria-label="User profile menu"
             aria-expanded={showUserMenu}
+            aria-haspopup="true"
           >
             {initials}
           </button>
 
-          {showUserMenu && (
-            <div className="dropdown-menu">
-              <div className="px-3 py-2 mb-1">
-                <div className="font-semibold text-sm text-[var(--text-primary)]">{user?.full_name || 'User'}</div>
-                <div className="text-xs text-[var(--text-tertiary)]">{user?.email || ''}</div>
-              </div>
-              <div className="dropdown-separator" />
-              <button className="dropdown-item" onClick={() => { navigate('/settings'); setShowUserMenu(false); }}>
-                <User size={16} />
-                Profile
-              </button>
-              <button className="dropdown-item" onClick={() => { navigate('/settings'); setShowUserMenu(false); }}>
-                <Settings size={16} />
-                Settings
-              </button>
-              <div className="dropdown-separator" />
-              <button className="dropdown-item danger" onClick={handleSignOut}>
-                <LogOut size={16} />
-                Sign Out
-              </button>
-            </div>
-          )}
+          <AnimatePresence>
+            {showUserMenu && (
+              <motion.div
+                role="menu"
+                aria-label="User dropdown menu"
+                initial={{ opacity: 0, scale: 0.95, y: -8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
+                onKeyDown={handleDropdownKeyDown}
+                className="absolute right-0 mt-3 w-[290px] rounded-2xl border border-border-primary bg-background-elevated shadow-2xl p-2.5 z-50 origin-top-right select-none"
+              >
+                {/* User info section */}
+                <div className="px-3 py-2.5 mb-1.5 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-[#FAFAFA] font-semibold shadow-sm shrink-0">
+                    {initials}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-sm text-[var(--text-primary)] truncate leading-tight">{user?.full_name || 'User'}</div>
+                    <div className="text-xs text-[var(--text-muted)] truncate mt-1" title={user?.email || ''}>{user?.email || ''}</div>
+                  </div>
+                </div>
+
+                <div className="border-t border-border-primary/30 my-1.5" />
+
+                {/* Menu items */}
+                <div className="space-y-0.5">
+                  <button
+                    role="menuitem"
+                    ref={el => { menuItemsRef.current[0] = el; }}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all text-left outline-none cursor-pointer focus:bg-background-primary/50 focus:text-text-primary focus:ring-1 focus:ring-accent-primary/20 ${focusedIndex === 0 ? 'bg-background-primary/50 text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-background-primary/50'}`}
+                    onClick={() => { navigate('/profile'); setShowUserMenu(false); }}
+                  >
+                    <User size={16} className="text-text-muted shrink-0" />
+                    <span>Profile</span>
+                  </button>
+
+                  <button
+                    role="menuitem"
+                    ref={el => { menuItemsRef.current[1] = el; }}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all text-left outline-none cursor-pointer focus:bg-background-primary/50 focus:text-text-primary focus:ring-1 focus:ring-accent-primary/20 ${focusedIndex === 1 ? 'bg-background-primary/50 text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-background-primary/50'}`}
+                    onClick={() => { navigate('/settings'); setShowUserMenu(false); }}
+                  >
+                    <Settings size={16} className="text-text-muted shrink-0" />
+                    <span>Settings</span>
+                  </button>
+
+                  <button
+                    role="menuitem"
+                    ref={el => { menuItemsRef.current[2] = el; }}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all text-left outline-none cursor-pointer focus:bg-background-primary/50 focus:text-text-primary focus:ring-1 focus:ring-accent-primary/20 ${focusedIndex === 2 ? 'bg-background-primary/50 text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-background-primary/50'}`}
+                    onClick={toggleTheme}
+                  >
+                    {theme === 'dark' ? (
+                      <>
+                        <Sun size={16} className="text-text-muted shrink-0" />
+                        <span>Light Mode</span>
+                      </>
+                    ) : (
+                      <>
+                        <Moon size={16} className="text-text-muted shrink-0" />
+                        <span>Dark Mode</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    role="menuitem"
+                    ref={el => { menuItemsRef.current[3] = el; }}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all text-left outline-none cursor-pointer focus:bg-background-primary/50 focus:text-text-primary focus:ring-1 focus:ring-accent-primary/20 ${focusedIndex === 3 ? 'bg-background-primary/50 text-text-primary' : 'text-text-secondary hover:text-text-primary hover:bg-background-primary/50'}`}
+                    onClick={() => { setShowNotifications(!showNotifications); setShowUserMenu(false); }}
+                  >
+                    <Bell size={16} className="text-text-muted shrink-0" />
+                    <span>Notifications</span>
+                  </button>
+                </div>
+
+                <div className="border-t border-border-primary/30 my-1.5" />
+
+                <button
+                  role="menuitem"
+                  ref={el => { menuItemsRef.current[4] = el; }}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all text-left outline-none cursor-pointer focus:bg-danger/10 focus:ring-1 focus:ring-danger/20 ${focusedIndex === 4 ? 'bg-danger/10 text-danger' : 'text-danger hover:bg-danger/10'}`}
+                  onClick={handleSignOut}
+                >
+                  <LogOut size={16} className="shrink-0" />
+                  <span>Sign Out</span>
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
       {/* Command Palette Modal */}
       <AnimatePresence>
         {isCommandPaletteOpen && (
-          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm p-4 pt-[15vh]">
+          <div 
+            className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm p-4 pt-[15vh]"
+            onClick={() => setIsCommandPaletteOpen(false)}
+          >
             <motion.div
               initial={{ opacity: 0, y: -20, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -10, scale: 0.98 }}
+              onClick={(e) => e.stopPropagation()}
               className="w-full max-w-lg bg-[var(--bg-card)] border border-[var(--border-primary)] rounded-xl shadow-2xl overflow-hidden"
             >
               <div className="flex items-center gap-3 px-4 py-3.5 border-b border-[var(--border-secondary)] bg-[var(--bg-tertiary)]">
@@ -307,7 +422,8 @@ export default function Header() {
                     { label: 'AI Insights Chat', path: '/ai-insights', desc: 'Chatbot and anomaly details' },
                     { label: 'Budgets & Alerts', path: '/budgets', desc: 'Threshold alerts & limits' },
                     { label: 'Reports', path: '/reports', desc: 'PDF / CSV compiled exports' },
-                    { label: 'Settings', path: '/settings', desc: 'User profile & AWS integration' },
+                    { label: 'Settings', path: '/settings', desc: 'AWS integrations, alerts, and system setup' },
+                    { label: 'Profile', path: '/profile', desc: 'User personal profile, security details, and statistics' },
                   ]
                     .filter(p => p.label.toLowerCase().includes(searchQuery.toLowerCase()))
                     .map(item => (

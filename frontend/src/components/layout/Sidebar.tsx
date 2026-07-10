@@ -24,18 +24,6 @@ const bottomNavItems = [
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
-const prefetchRoute = (path: string) => {
-  switch (path) {
-    case '/dashboard': import('../../pages/Dashboard'); break;
-    case '/analytics': import('../../pages/CostAnalytics'); break;
-    case '/resources': import('../../pages/Resources'); break;
-    case '/ai-insights': import('../../pages/AIInsights'); break;
-    case '/budgets': import('../../pages/Budgets'); break;
-    case '/reports': import('../../pages/Reports'); break;
-    case '/settings': import('../../pages/Settings'); break;
-  }
-};
-
 export default function Sidebar() {
   const { sidebarOpen, sidebarCollapsed, toggleSidebarCollapse, user } = useStore();
 
@@ -59,7 +47,6 @@ export default function Sidebar() {
           <NavLink
             key={item.path}
             to={item.path}
-            onMouseEnter={() => prefetchRoute(item.path)}
             className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-md font-medium text-sm transition-all duration-200 border ${isActive ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20' : 'text-text-secondary border-transparent hover:bg-[#111827]/5 dark:hover:bg-[#FAFAFA]/5 hover:text-text-primary'}`}
             title={sidebarCollapsed ? item.label : undefined}
           >
@@ -73,7 +60,6 @@ export default function Sidebar() {
           <NavLink
             key={item.path}
             to={item.path}
-            onMouseEnter={() => prefetchRoute(item.path)}
             className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-md font-medium text-sm transition-all duration-200 border ${isActive ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20' : 'text-text-secondary border-transparent hover:bg-[#111827]/5 dark:hover:bg-[#FAFAFA]/5 hover:text-text-primary'}`}
             title={sidebarCollapsed ? item.label : undefined}
           >

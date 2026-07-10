@@ -34,7 +34,7 @@ export function DashboardDataCube() {
   if (!hasWebGL) return null;
 
   return (
-    <div className="w-16 h-16 absolute -top-4 -right-4 pointer-events-none opacity-50">
+    <div className="hidden md:block w-16 h-16 absolute -top-4 -right-4 pointer-events-none opacity-50">
       <Canvas camera={{ position: [0, 0, 5] }}>
         <ambientLight intensity={0.5} />
         <DataCubeMesh color="#3b82f6" />
@@ -97,7 +97,7 @@ export function AnalyticsNetworkGraph() {
   if (!hasWebGL) return null;
 
   return (
-    <div className="absolute right-0 top-0 w-32 h-32 opacity-40 pointer-events-none">
+    <div className="hidden md:block absolute right-0 top-0 w-32 h-32 opacity-40 pointer-events-none">
       <Canvas camera={{ position: [0, 0, 4] }}>
         <ambientLight intensity={1} />
         <NetworkGraphMesh />
@@ -135,7 +135,7 @@ export function ReportsAnalyticsCube() {
   if (!hasWebGL) return null;
 
   return (
-    <div className="w-24 h-24 absolute right-8 top-8 opacity-30 pointer-events-none">
+    <div className="hidden md:block w-24 h-24 absolute right-8 top-8 opacity-30 pointer-events-none">
       <Canvas camera={{ position: [0, 0, 5] }}>
         <ambientLight intensity={1} />
         <AnalyticsCubeMesh />
@@ -173,7 +173,7 @@ export function SettingsHoloSphere() {
   if (!hasWebGL) return null;
 
   return (
-    <div className="w-20 h-20 absolute -right-2 top-0 opacity-40 pointer-events-none">
+    <div className="hidden md:block w-20 h-20 absolute -right-2 top-0 opacity-40 pointer-events-none">
       <Canvas camera={{ position: [0, 0, 4] }}>
         <ambientLight intensity={1} />
         <HoloSphereMesh />

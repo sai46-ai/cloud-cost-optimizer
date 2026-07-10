@@ -251,7 +251,7 @@ export default function AIInsights() {
                       <>
                         <span className="text-[10px] text-text-muted">•</span>
                         <span className="text-[10px] text-text-muted font-medium">
-                          Powered by {msg.source === 'ai' ? 'OpenAI' : msg.source === 'system' ? 'System Guide' : 'CloudWise KB'}
+                          Powered by {msg.source === 'ai' ? 'Gemini AI' : msg.source === 'system' ? 'System Guide' : 'CloudWise KB'}
                         </span>
                       </>
                     )}

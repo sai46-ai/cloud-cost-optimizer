@@ -3,12 +3,15 @@ import logging
 import uuid
 from app.main import app
 
+from app.database import init_db
+
 client = TestClient(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def run_tests():
     logger.info("Starting API verification...")
+    init_db()
     
     # 1. Test Health endpoint
     response = client.get("/health")

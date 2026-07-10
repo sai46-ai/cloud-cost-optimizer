@@ -219,7 +219,7 @@ export default function Budgets() {
                       {budget.service ? budget.service : 'All Services'} • {budget.period}
                     </div>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-1 opacity-80 md:opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                     <button className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-background-elevated h-8 w-8 text-text-secondary" onClick={() => openEditModal(budget)}><Edit2 size={14} /></button>
                     <button className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:bg-danger/10 h-8 w-8 text-danger" onClick={() => openDeleteModal(budget)}><Trash2 size={14} /></button>
                   </div>
@@ -275,11 +275,15 @@ export default function Budgets() {
       <AnimatePresence>
         {/* Create Modal */}
         {showCreateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111827]/70 backdrop-blur-sm p-4">
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#111827]/70 backdrop-blur-sm p-4"
+            onClick={() => setShowCreateModal(false)}
+          >
             <motion.div 
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
               className="w-full max-w-lg bg-background-card border border-border-primary rounded-xl relative shadow-2xl p-6"
             >
               <button className="absolute top-4 right-4 text-text-muted hover:text-text-primary" onClick={() => setShowCreateModal(false)}>
@@ -341,11 +345,15 @@ export default function Budgets() {
 
         {/* Edit Modal */}
         {showEditModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111827]/70 backdrop-blur-sm p-4">
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#111827]/70 backdrop-blur-sm p-4"
+            onClick={() => setShowEditModal(false)}
+          >
             <motion.div 
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
               className="w-full max-w-lg bg-background-card border border-border-primary rounded-xl relative shadow-2xl p-6"
             >
               <button className="absolute top-4 right-4 text-text-muted hover:text-text-primary" onClick={() => setShowEditModal(false)}>
@@ -407,11 +415,15 @@ export default function Budgets() {
 
         {/* Delete Confirmation Modal */}
         {showDeleteModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#111827]/70 backdrop-blur-sm p-4">
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#111827]/70 backdrop-blur-sm p-4"
+            onClick={() => setShowDeleteModal(false)}
+          >
             <motion.div 
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
               className="w-full max-w-md bg-background-card border border-border-primary p-6 rounded-xl shadow-2xl text-center"
             >
               <h3 className="text-lg font-bold text-danger mb-2 flex items-center justify-center gap-2">

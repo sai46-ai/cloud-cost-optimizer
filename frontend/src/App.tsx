@@ -3,23 +3,33 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Layout from './components/layout/Layout';
 import AuthLayout from './components/layout/AuthLayout';
 import useStore from './store';
-import { authService } from './services/api';
+import { 
+  authService, 
+  costService, 
+  budgetService, 
+  recommendationService, 
+  anomalyService, 
+  aiService, 
+  reportService, 
+  settingsService 
+} from './services/api';
 
-const Login = React.lazy(() => import('./pages/Login'));
-const Register = React.lazy(() => import('./pages/Register'));
-const ForgotPassword = React.lazy(() => import('./pages/ForgotPassword'));
-const ResetPassword = React.lazy(() => import('./pages/ResetPassword'));
-const VerifyEmail = React.lazy(() => import('./pages/VerifyEmail'));
-const Unauthorized = React.lazy(() => import('./pages/Unauthorized'));
+import Login from './pages/Login';
+import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import VerifyEmail from './pages/VerifyEmail';
+import Unauthorized from './pages/Unauthorized';
 
-const Dashboard = React.lazy(() => import('./pages/Dashboard'));
-const CostAnalytics = React.lazy(() => import('./pages/CostAnalytics'));
-const Resources = React.lazy(() => import('./pages/Resources'));
-const AIInsights = React.lazy(() => import('./pages/AIInsights'));
-const Budgets = React.lazy(() => import('./pages/Budgets'));
-const Reports = React.lazy(() => import('./pages/Reports'));
-const Settings = React.lazy(() => import('./pages/Settings'));
-const Landing = React.lazy(() => import('./pages/Landing'));
+import Dashboard from './pages/Dashboard';
+import CostAnalytics from './pages/CostAnalytics';
+import Resources from './pages/Resources';
+import AIInsights from './pages/AIInsights';
+import Budgets from './pages/Budgets';
+import Reports from './pages/Reports';
+import Settings from './pages/Settings';
+import Profile from './pages/Profile';
+import Landing from './pages/Landing';
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -95,6 +105,70 @@ function App() {
     initAuth();
   }, [setAuthenticated, setUser, setOffline]);
 
+  // 3-Phase Staggered Prewarming System
+  const isAuthenticated = useStore((state) => state.isAuthenticated);
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let isCancelled = false;
+
+    const prewarmData = async () => {
+      try {
+        // Phase 1: Critical dashboard data
+        if (isCancelled) return;
+        await costService.getDashboard();
+
+        // Stagger Phase 2 by 200ms to prevent API saturation
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, 200);
+          if (isCancelled) {
+            clearTimeout(timer);
+            resolve();
+          }
+        });
+
+        // Phase 2: Core analytics data
+        if (isCancelled) return;
+        await Promise.all([
+          costService.getBreakdown(),
+          costService.getCosts(),
+        ]);
+
+        // Stagger Phase 3 by 300ms
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, 300);
+          if (isCancelled) {
+            clearTimeout(timer);
+            resolve();
+          }
+        });
+
+        // Phase 3: Secondary operations
+        if (isCancelled) return;
+        await Promise.all([
+          budgetService.getBudgets(),
+          recommendationService.getRecommendations(),
+          recommendationService.getSummary(),
+          recommendationService.getIdleResources(),
+          anomalyService.getAnomalies(),
+          anomalyService.getSummary(),
+          aiService.getForecasts(),
+          reportService.getReports(),
+          settingsService.getSettings(),
+          settingsService.getAWSAccount(),
+        ]);
+      } catch (err) {
+        console.warn("Prewarming was cancelled or failed:", err);
+      }
+    };
+
+    prewarmData();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isAuthenticated]);
+
   if (isInitializing) {
     return <div className="h-screen w-screen flex items-center justify-center bg-[var(--bg-primary)]">
       <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
@@ -116,11 +190,7 @@ function App() {
         </Route>
 
         {/* Public Landing Route */}
-        <Route path="/" element={
-          <Suspense fallback={<div className="h-screen w-screen bg-[var(--bg-primary)]"></div>}>
-            <Landing />
-          </Suspense>
-        } />
+        <Route path="/" element={<Landing />} />
 
         {/* Protected Dashboard Routes */}
         <Route element={
@@ -135,6 +205,7 @@ function App() {
           <Route path="/budgets" element={<Budgets />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/profile" element={<Profile />} />
         </Route>
         
         {/* Fallback */}

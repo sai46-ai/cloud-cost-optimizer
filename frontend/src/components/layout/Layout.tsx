@@ -32,13 +32,11 @@ export default function Layout() {
       <div className={`flex-1 flex flex-col min-h-screen transition-all duration-300 ${sidebarCollapsed ? 'md:ml-[68px]' : 'md:ml-[260px]'}`}>
         <Header />
         <main className="flex-1 p-8 max-w-[1400px] w-full mx-auto">
-          <AnimatePresence mode="wait">
-            <PageTransition key={location.pathname}>
-              <Suspense fallback={<PageFallback />}>
-                <Outlet />
-              </Suspense>
-            </PageTransition>
-          </AnimatePresence>
+          <PageTransition key={location.pathname}>
+            <Suspense fallback={<PageFallback />}>
+              <Outlet />
+            </Suspense>
+          </PageTransition>
         </main>
       </div>
 
