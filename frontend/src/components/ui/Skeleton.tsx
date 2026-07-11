@@ -6,7 +6,7 @@ export type SkeletonProps = React.HTMLAttributes<HTMLDivElement>;
 export function Skeleton({ className, ...props }: SkeletonProps) {
   return (
     <div
-      className={cn("animate-pulse rounded-md bg-[var(--border-primary)] opacity-50", className)}
+      className={cn("animate-pulse rounded-lg bg-border-primary/70", className)}
       {...props}
     />
   );
@@ -42,7 +42,7 @@ export function SkeletonTable({ rows = 5, cols = 4 }: { rows?: number; cols?: nu
           <Skeleton key={i} className="h-6 flex-grow" />
         ))}
       </div>
-      <div className="border border-[var(--border-primary)] rounded-lg divide-y divide-[var(--border-primary)] bg-[var(--bg-secondary)]">
+      <div className="border border-border-primary rounded-xl divide-y divide-border-primary bg-background-secondary/40">
         {Array.from({ length: rows }).map((_, i) => (
           <div key={i} className="p-4 flex gap-4">
             {Array.from({ length: cols }).map((_, j) => (

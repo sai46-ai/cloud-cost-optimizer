@@ -58,13 +58,17 @@ def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
     service = AuthService(db)
     result = service.login(email=data.email, password=data.password)
     user_id = result.get("user", {}).get("id")
+    role = result.get("user", {}).get("role")
+    action = "admin_login" if role == "ADMIN" else "login"
+    description = f"Admin logged in: {data.email}" if role == "ADMIN" else f"User logged in: {data.email}"
+    
     AuditService.log_action(
         db=db,
         user_id=user_id,
-        action="login",
+        action=action,
         resource_type="user",
         resource_id=user_id,
-        description=f"User logged in: {data.email}",
+        description=description,
         ip_address=request.client.host if request.client else None,
         user_agent=request.headers.get("user-agent"),
     )

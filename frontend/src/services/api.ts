@@ -11,19 +11,22 @@ export const api = axios.create({
   },
 });
 
-// Lightweight in-memory cache for GET requests
-const cache = new Map<string, { data: any; timestamp: number }>();
+// Lightweight in-memory cache for GET requests (caches promises to prevent concurrent duplicate calls)
+const cache = new Map<string, { promise: Promise<any>; timestamp: number }>();
 const CACHE_TTL = 2 * 60 * 1000; // 2 minutes
 
-const getCached = async (url: string, config?: any) => {
+const getCached = (url: string, config?: any): Promise<any> => {
   const key = url + JSON.stringify(config?.params || {});
   const cached = cache.get(key);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return { data: cached.data };
+    return cached.promise;
   }
-  const response = await api.get(url, config);
-  cache.set(key, { data: response.data, timestamp: Date.now() });
-  return response;
+  const promise = api.get(url, config).catch((error) => {
+    cache.delete(key);
+    throw error;
+  });
+  cache.set(key, { promise, timestamp: Date.now() });
+  return promise;
 };
 
 // Request interceptor for auth token and cache invalidation
@@ -146,4 +149,12 @@ export const settingsService = {
 
 export const auditService = {
   getAuditLogs: (page = 1, pageSize = 20) => api.get('/audit-logs', { params: { page, page_size: pageSize } }).then(res => res.data),
+};
+
+export const adminService = {
+  getDashboard: () => api.get('/admin/dashboard').then(res => res.data),
+  getUsers: (params: any) => api.get('/admin/users', { params }).then(res => res.data),
+  updateRole: (userId: string, role: string) => api.put(`/admin/users/${userId}/role`, { role }).then(res => res.data),
+  updateStatus: (userId: string, status: string) => api.put(`/admin/users/${userId}/status`, { account_status: status }).then(res => res.data),
+  getAdminAuditLogs: (page = 1, pageSize = 20) => api.get('/admin/audit-logs', { params: { page, page_size: pageSize } }).then(res => res.data),
 };

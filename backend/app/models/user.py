@@ -1,9 +1,15 @@
-"""User model with RBAC support."""
-
-from sqlalchemy import String, Boolean, ForeignKey
+import enum
+from sqlalchemy import String, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from datetime import datetime
 from app.database import Base
 from app.models.base import TimestampMixin, generate_uuid
+
+
+class UserRole(str, enum.Enum):
+    ADMIN = "ADMIN"
+    REVIEWER = "REVIEWER"
+    USER = "USER"
 
 
 class User(Base, TimestampMixin):
@@ -19,9 +25,13 @@ class User(Base, TimestampMixin):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(
-        String(50), default="viewer"
-    )  # admin, manager, viewer
+        String(50), default="USER", server_default="USER"
+    )  # ADMIN, REVIEWER, USER
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    account_status: Mapped[str] = mapped_column(
+        String(20), default="active", server_default="active"
+    )  # active, disabled
+    last_login: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     avatar_url: Mapped[str] = mapped_column(String(500), nullable=True)
 
     # Relationships
@@ -43,6 +53,16 @@ class User(Base, TimestampMixin):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+
+    @property
+    def is_demo_mode(self) -> bool:
+        return self.role == "REVIEWER"
+
+    @property
+    def is_aws_connected(self) -> bool:
+        if not self.organization:
+            return False
+        return any(acc.is_active for acc in self.organization.aws_accounts)
 
     def __repr__(self) -> str:
         return f"<User {self.email}>"

@@ -8,8 +8,8 @@ import PageTransition from './PageTransition';
 import useStore from '../../store';
 
 const PageFallback = () => (
-  <div className="w-full h-full min-h-[400px] flex items-center justify-center">
-    <div className="w-8 h-8 border-4 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin"></div>
+  <div className="w-full h-full min-h-[400px] flex items-center justify-center" role="status" aria-label="Loading page">
+    <div className="w-8 h-8 border-4 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin" aria-hidden="true"></div>
   </div>
 );
 
@@ -24,6 +24,7 @@ export default function Layout() {
         <div 
           className="fixed inset-0 bg-[#111827]/60 backdrop-blur-sm z-30 md:hidden"
           onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
         />
       )}
       
@@ -41,7 +42,7 @@ export default function Layout() {
       </div>
 
       {/* Floating Toast Notification overlay */}
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none">
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 pointer-events-none" aria-live="polite" aria-label="Notifications" role="status">
         <AnimatePresence>
           {toasts.map((toast) => (
             <motion.div
@@ -72,6 +73,7 @@ export default function Layout() {
               
               <button
                 onClick={() => removeToast(toast.id)}
+                aria-label="Dismiss notification"
                 className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors p-0.5"
               >
                 <X size={14} />

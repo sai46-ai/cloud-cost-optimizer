@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { anomalyService, aiService } from '../services/api';
 import { formatCurrency, formatDate } from '../lib/utils';
 import { Sparkles, Send, Bot, User, AlertTriangle, AlertCircle, Info, Activity, Check } from 'lucide-react';
@@ -6,6 +6,9 @@ import Badge from '../components/ui/Badge';
 import PageTransition from '../components/layout/PageTransition';
 import { Skeleton, SkeletonChat } from '../components/ui/Skeleton';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
+import useStore from '../store';
+import AWSOnboardingState from '../components/ui/AWSOnboardingState';
+import AWSErrorState from '../components/ui/AWSErrorState';
 
 export default function AIInsights() {
   const [anomalies, setAnomalies] = useState<any[]>([]);
@@ -21,25 +24,36 @@ export default function AIInsights() {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [hasAWSError, setHasAWSError] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { user } = useStore();
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const data = await anomalyService.getAnomalies();
-        setAnomalies(data.filter((a: any) => !a.is_resolved));
-      } catch {
-        // Silently handle error
-      } finally {
-        setLoading(false);
-      }
+  const loadData = useCallback(async () => {
+    if (user && !user.is_demo_mode && !user.is_aws_connected) {
+      setLoading(false);
+      return;
     }
-    loadData();
-  }, []);
+    setLoading(true);
+    setHasAWSError(false);
+    try {
+      const data = await anomalyService.getAnomalies();
+      setAnomalies((data || []).filter((a: any) => !a.is_resolved));
+    } catch (error: any) {
+      console.error("Failed to load anomalies:", error);
+      if (error.message && (error.message.includes("AWS_ERROR") || error.message.includes("AWS") || error.message.includes("credentials") || error.message.includes("502"))) {
+        setHasAWSError(true);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
   useEffect(() => {
-    // Auto-scroll chat
+    loadData();
+  }, [loadData]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
@@ -95,6 +109,14 @@ export default function AIInsights() {
     
     return <div dangerouslySetInnerHTML={{ __html: formatted }} />;
   };
+
+  if (user && !user.is_demo_mode && !user.is_aws_connected) {
+    return <AWSOnboardingState />;
+  }
+
+  if (hasAWSError) {
+    return <AWSErrorState onRetry={loadData} isLoading={loading} />;
+  }
 
   if (loading) {
     return (

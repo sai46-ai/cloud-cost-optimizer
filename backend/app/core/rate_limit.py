@@ -6,7 +6,8 @@ from app.core.config import get_settings
 settings = get_settings()
 
 # Thread-safe in-memory request log: IP address -> list of request timestamps
-_request_history = {}
+from typing import Dict, List
+_request_history: Dict[str, List[float]] = {}
 _lock = threading.Lock()
 
 

@@ -57,22 +57,24 @@ class AuthService:
         org = Organization(name=organization_name, slug=slug)
         self.org_repo.create(org)
 
-        # Create user (first user is admin)
+        # Create user (first user is ADMIN)
+        is_first = self.user_repo.count() == 0
         user = User(
             email=email,
             full_name=full_name,
             hashed_password=hash_password(password),
             org_id=org.id,
-            role="admin",
+            role="ADMIN" if is_first else "USER",
         )
         self.user_repo.create(user)
 
-        # Auto-seed financial records for new registration to display rich dashboards
-        try:
-            from seed import seed_user_data
-            seed_user_data(user, self.db)
-        except Exception as e:
-            logger.warning("Failed to auto-seed user data: %s", e)
+        # Auto-seed financial records for new registration ONLY if user is a reviewer
+        if user.is_demo_mode:
+            try:
+                from seed import seed_user_data
+                seed_user_data(user, self.db)
+            except Exception as e:
+                logger.warning("Failed to auto-seed user data: %s", e)
 
         return self._generate_tokens(user)
 
@@ -81,8 +83,25 @@ class AuthService:
         user = self.user_repo.get_by_email(email)
         if not user or not verify_password(password, user.hashed_password):
             raise AuthenticationError("Invalid email or password")
-        if not user.is_active:
+        if not user.is_active or user.account_status == "disabled":
             raise AuthenticationError("Account is disabled")
+        
+        # Update last login timestamp
+        from datetime import datetime, timezone
+        user.last_login = datetime.now(timezone.utc)
+        self.db.commit()
+        
+        # If user is reviewer, ensure demo data is seeded
+        if user.is_demo_mode:
+            from app.models.cost_record import CostRecord
+            exists = self.db.query(CostRecord).filter_by(user_id=user.id).first()
+            if not exists:
+                try:
+                    from seed import seed_user_data
+                    seed_user_data(user, self.db)
+                except Exception as e:
+                    logger.warning("Failed to auto-seed reviewer user data on login: %s", e)
+                    
         return self._generate_tokens(user)
 
     def refresh_token(self, refresh_token: str) -> dict:
@@ -96,7 +115,7 @@ class AuthService:
             raise AuthenticationError("Invalid or expired refresh token")
 
         user = self.user_repo.get_by_id(tp.user_id)
-        if not user or not user.is_active:
+        if not user or not user.is_active or user.account_status == "disabled":
             raise AuthenticationError("User not found or disabled")
 
         return self._generate_tokens(user)
@@ -112,7 +131,7 @@ class AuthService:
             raise AuthenticationError("Invalid or expired token")
 
         user = self.user_repo.get_by_id(tp.user_id)
-        if not user or not user.is_active:
+        if not user or not user.is_active or user.account_status == "disabled":
             raise AuthenticationError("User not found or disabled")
         return user
 
@@ -143,9 +162,13 @@ class AuthService:
             "full_name": user.full_name,
             "role": user.role,
             "is_active": user.is_active,
+            "account_status": user.account_status,
+            "last_login": user.last_login,
             "avatar_url": user.avatar_url,
             "org_id": user.org_id,
             "created_at": user.created_at,
+            "is_demo_mode": user.is_demo_mode,
+            "is_aws_connected": user.is_aws_connected,
         }
 
     def _generate_tokens(self, user: User) -> dict:
@@ -162,8 +185,12 @@ class AuthService:
                 "full_name": user.full_name,
                 "role": user.role,
                 "is_active": user.is_active,
+                "account_status": user.account_status,
+                "last_login": user.last_login,
                 "avatar_url": user.avatar_url,
                 "org_id": user.org_id,
                 "created_at": user.created_at,
+                "is_demo_mode": user.is_demo_mode,
+                "is_aws_connected": user.is_aws_connected,
             },
         }

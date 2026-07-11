@@ -19,6 +19,8 @@ from sqlalchemy.orm import Session
 
 from app.models.cost_record import CostRecord
 from app.models.forecast import Forecast
+from app.models.user import User
+from app.models.aws_account import AWSAccount
 
 logger = logging.getLogger(__name__)
 
@@ -31,20 +33,44 @@ class CostForecaster:
 
     def generate_forecasts(self, user_id: str) -> List[Forecast]:
         """Generate forecasts for multiple time horizons."""
-        records = (
-            self.db.query(CostRecord)
-            .filter(CostRecord.user_id == user_id)
-            .order_by(CostRecord.date)
-            .all()
-        )
-        if not ML_AVAILABLE or len(records) < 30:
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return []
+
+        # Get records based on user type
+        if user.is_demo_mode:
+            records = (
+                self.db.query(CostRecord)
+                .filter(CostRecord.user_id == user_id)
+                .order_by(CostRecord.date)
+                .all()
+            )
+        else:
+            if not user.is_aws_connected:
+                return []
+            aws_account = self.db.query(AWSAccount).filter(AWSAccount.org_id == user.org_id, AWSAccount.is_active.is_(True)).first()
+            if not aws_account:
+                return []
+            
+            today = date.today()
+            start_date = today - timedelta(days=90)
+            from app.services.aws_cost_explorer import cost_explorer_service
+            records = cost_explorer_service.get_live_costs(aws_account, start_date, today)
+
+        if not ML_AVAILABLE or len(records) < 14:
             logger.warning(
-                "Insufficient data or ML missing for forecasting (need 30+ daily records)"
+                "Insufficient data or ML missing for forecasting (need 14+ daily records)"
             )
             return []
 
         # Aggregate daily totals
-        df = pd.DataFrame([{"date": r.date, "amount": r.amount} for r in records])
+        df = pd.DataFrame([
+            {
+                "date": r.date if not isinstance(r, dict) else r.get("date"),
+                "amount": r.amount if not isinstance(r, dict) else r.get("amount")
+            } 
+            for r in records
+        ])
         df["date"] = pd.to_datetime(df["date"])
         daily = df.groupby("date")["amount"].sum().reset_index()
         daily = daily.sort_values("date")
@@ -70,25 +96,56 @@ class CostForecaster:
                 generated_at=datetime.now(timezone.utc),
             )
             forecasts.append(forecast)
-            self.db.add(forecast)
+            
+            # Save to database only for reviewers
+            if user.is_demo_mode:
+                self.db.add(forecast)
 
-        self.db.commit()
+        if user.is_demo_mode:
+            self.db.commit()
+            
         return forecasts
 
     def get_latest_forecasts(self, user_id: str) -> dict:
         """Get the most recent forecast for each horizon."""
-        horizons = ["day", "week", "month", "quarter"]
-        result = {}
-        for h in horizons:
-            forecast = (
-                self.db.query(Forecast)
-                .filter(Forecast.user_id == user_id, Forecast.horizon == h)
-                .order_by(Forecast.generated_at.desc())
-                .first()
-            )
-            if forecast:
-                result[f"next_{h}"] = {
-                    "id": forecast.id,
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return {}
+
+        if user.is_demo_mode:
+            horizons = ["day", "week", "month", "quarter"]
+            result = {}
+            for h in horizons:
+                forecast = (
+                    self.db.query(Forecast)
+                    .filter(Forecast.user_id == user_id, Forecast.horizon == h)
+                    .order_by(Forecast.generated_at.desc())
+                    .first()
+                )
+                if forecast:
+                    result[f"next_{h}"] = {
+                        "id": forecast.id,
+                        "horizon": forecast.horizon,
+                        "forecast_date": str(forecast.forecast_date),
+                        "predicted_amount": forecast.predicted_amount,
+                        "lower_bound": forecast.lower_bound,
+                        "upper_bound": forecast.upper_bound,
+                        "confidence": forecast.confidence,
+                        "model_used": forecast.model_used,
+                        "generated_at": (
+                            forecast.generated_at.isoformat()
+                            if forecast.generated_at
+                            else None
+                        ),
+                    }
+            return result
+        else:
+            # Generate dynamically on the fly
+            forecasts = self.generate_forecasts(user_id)
+            result = {}
+            for forecast in forecasts:
+                result[f"next_{forecast.horizon}"] = {
+                    "id": getattr(forecast, "id", f"live-forecast-{forecast.horizon}"),
                     "horizon": forecast.horizon,
                     "forecast_date": str(forecast.forecast_date),
                     "predicted_amount": forecast.predicted_amount,
@@ -102,7 +159,7 @@ class CostForecaster:
                         else None
                     ),
                 }
-        return result
+            return result
 
     def _forecast_statistical(self, daily: pd.DataFrame, days_ahead: int) -> tuple:
         """Statistical forecasting using weighted moving average + trend."""

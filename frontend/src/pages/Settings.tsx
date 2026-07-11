@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Save, Key, User, Shield, Bell, Info, Activity } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import useStore from '../store';
 import { settingsService, authService, auditService } from '../services/api';
 import PageTransition from '../components/layout/PageTransition';
@@ -7,10 +8,20 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card'
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { SettingsHoloSphere } from '../components/3d/Internal3DElements';
+import { SkeletonTable } from '../components/ui/Skeleton';
 
 export default function Settings() {
   const { theme, toggleTheme, user, setUser, addToast } = useStore();
-  const [activeTab, setActiveTab] = useState('general');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(tabParam || 'general');
+
+  useEffect(() => {
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
+
   const [settings, setSettings] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -203,14 +214,20 @@ export default function Settings() {
             {tabs.map(tab => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setSearchParams({ tab: tab.id });
+                }}
+                className={`relative flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${
                   activeTab === tab.id 
-                    ? 'bg-accent-primary/10 text-accent-primary' 
-                    : 'text-text-secondary hover:bg-background-elevated hover:text-text-primary'
+                    ? 'bg-accent-primary/8 text-accent-primary border-accent-primary/15 shadow-sm' 
+                    : 'text-text-secondary border-transparent hover:bg-background-secondary/60 hover:text-text-primary'
                 }`}
               >
-                <tab.icon size={18} />
+                {activeTab === tab.id && (
+                  <span className="absolute left-0 top-3 bottom-3 w-1 rounded-r-md bg-accent-primary" />
+                )}
+                <tab.icon size={18} className={activeTab === tab.id ? 'text-accent-primary' : 'text-text-muted'} />
                 {tab.label}
               </button>
             ))}
@@ -490,14 +507,12 @@ export default function Settings() {
               
               <CardContent>
                 {loadingAudit ? (
-                  <div className="flex justify-center p-8">
-                    <div className="w-8 h-8 border-4 border-accent-primary border-t-transparent rounded-full animate-spin"></div>
-                  </div>
+                  <SkeletonTable rows={4} cols={5} />
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-border-primary text-xs font-semibold text-text-secondary uppercase">
+                  <div className="rounded-xl border border-border-primary bg-background-secondary overflow-hidden shadow-sm">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-background-elevated border-b border-border-primary text-[10px] font-bold uppercase tracking-wider text-text-muted">
+                        <tr>
                           <th className="py-3 px-4">Timestamp</th>
                           <th className="py-3 px-4">Action</th>
                           <th className="py-3 px-4">Resource</th>
@@ -505,36 +520,36 @@ export default function Settings() {
                           <th className="py-3 px-4">IP Address</th>
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody className="divide-y divide-border-primary/50 bg-background-secondary/20">
                         {auditLogs.map((log: any) => (
-                          <tr key={log.id} className="border-b border-border-subtle text-sm text-text-primary hover:bg-background-elevated/40 transition-colors">
-                            <td className="py-3 px-4 text-xs font-mono text-text-secondary">
+                          <tr key={log.id} className="text-text-primary hover:bg-background-elevated/60 transition-colors">
+                            <td className="py-3.5 px-4 text-xs font-mono text-text-secondary">
                               {new Date(log.created_at).toLocaleString()}
                             </td>
-                            <td className="py-3 px-4">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold uppercase ${
-                                log.action === 'login' ? 'bg-success/15 text-success' :
-                                log.action === 'register' ? 'bg-accent-cyan/15 text-accent-cyan' :
-                                log.action === 'create' ? 'bg-accent-primary/15 text-accent-primary' :
-                                log.action === 'delete' ? 'bg-danger/15 text-danger' : 'bg-text-muted/15 text-text-muted'
+                            <td className="py-3.5 px-4">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                log.action === 'login' ? 'bg-success/15 text-success border border-success/20' :
+                                log.action === 'register' ? 'bg-accent-cyan/15 text-accent-cyan border border-accent-cyan/20' :
+                                log.action === 'create' ? 'bg-accent-primary/15 text-accent-primary border border-accent-primary/20' :
+                                log.action === 'delete' ? 'bg-danger/15 text-danger border border-danger/20' : 'bg-text-muted/15 text-text-muted border border-border-primary'
                               }`}>
                                 {log.action}
                               </span>
                             </td>
-                            <td className="py-3 px-4 text-xs font-mono text-text-secondary">
+                            <td className="py-3.5 px-4 text-xs font-mono text-text-secondary">
                               {log.resource_type || '-'}
                             </td>
-                            <td className="py-3 px-4">
+                            <td className="py-3.5 px-4 font-medium">
                               {log.description || '-'}
                             </td>
-                            <td className="py-3 px-4 text-xs font-mono text-text-secondary">
+                            <td className="py-3.5 px-4 text-xs font-mono text-text-secondary">
                               {log.ip_address || '-'}
                             </td>
                           </tr>
                         ))}
                         {auditLogs.length === 0 && (
                           <tr>
-                            <td colSpan={5} className="py-8 text-center text-text-muted text-sm">
+                            <td colSpan={5} className="py-8 text-center text-text-muted font-medium text-xs">
                               No logs recorded yet.
                             </td>
                           </tr>

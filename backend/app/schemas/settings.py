@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class SettingsBase(BaseModel):
@@ -16,11 +16,10 @@ class SettingsUpdate(SettingsBase):
 
 
 class SettingsResponse(SettingsBase):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     user_id: str
-
-    class Config:
-        from_attributes = True
 
 
 class AWSAccountUpdate(BaseModel):
@@ -31,6 +30,8 @@ class AWSAccountUpdate(BaseModel):
 
 
 class AWSAccountResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     org_id: str
     account_id: str
@@ -39,6 +40,3 @@ class AWSAccountResponse(BaseModel):
     external_id: str | None = None
     region: str
     is_active: bool
-
-    class Config:
-        from_attributes = True

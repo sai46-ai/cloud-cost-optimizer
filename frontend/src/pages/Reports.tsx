@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { reportService, BACKEND_URL } from '../services/api';
 import { Download, FileText, FileSpreadsheet, CheckCircle2, Trash2 } from 'lucide-react';
 import { DataTable } from '../components/ui/DataTable';
@@ -7,32 +7,46 @@ import PageTransition from '../components/layout/PageTransition';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { ReportsAnalyticsCube } from '../components/3d/Internal3DElements';
+import AWSOnboardingState from '../components/ui/AWSOnboardingState';
+import AWSErrorState from '../components/ui/AWSErrorState';
+import { SkeletonTable } from '../components/ui/Skeleton';
 
 export default function Reports() {
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasAWSError, setHasAWSError] = useState(false);
   
   // Form states
   const [reportType, setReportType] = useState('cost_summary');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  const { addToast } = useStore();
+  const { addToast, user } = useStore();
 
-  async function loadReports() {
+  const loadReports = useCallback(async () => {
+    if (user && !user.is_demo_mode && !user.is_aws_connected) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setHasAWSError(false);
     try {
       const data = await reportService.getReports();
       setReports(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to load reports:", error);
+      if (error.message && (error.message.includes("AWS_ERROR") || error.message.includes("AWS") || error.message.includes("credentials") || error.message.includes("502"))) {
+        setHasAWSError(true);
+      }
     } finally {
       setLoading(false);
     }
-  }
+  }, [user]);
 
   useEffect(() => {
     loadReports();
-  }, []);
+  }, [loadReports]);
 
   const handleGeneratePDF = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,6 +101,14 @@ export default function Reports() {
     }
   };
 
+  if (user && !user.is_demo_mode && !user.is_aws_connected) {
+    return <AWSOnboardingState />;
+  }
+
+  if (hasAWSError) {
+    return <AWSErrorState onRetry={loadReports} isLoading={loading} />;
+  }
+
   return (
     <PageTransition>
       <div className="mb-8 relative">
@@ -110,7 +132,7 @@ export default function Reports() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-text-primary">Report Type</label>
                     <select 
-                      className="w-full h-10 px-3 py-2 rounded-md border border-border-primary bg-background-primary text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors" 
+                      className="flex h-10 w-full rounded-lg border border-border-primary bg-background-primary px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:border-accent-primary focus-visible:ring-2 focus-visible:ring-accent-primary/20 disabled:cursor-not-allowed disabled:opacity-55 transition-all duration-200 shadow-sm" 
                       value={reportType}
                       onChange={(e) => setReportType(e.target.value)}
                     >
@@ -122,7 +144,7 @@ export default function Reports() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-text-primary">Date Range</label>
-                    <select className="w-full h-10 px-3 py-2 rounded-md border border-border-primary bg-background-primary text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors" defaultValue="Last 30 Days">
+                    <select className="flex h-10 w-full rounded-lg border border-border-primary bg-background-primary px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:border-accent-primary focus-visible:ring-2 focus-visible:ring-accent-primary/20 disabled:cursor-not-allowed disabled:opacity-55 transition-all duration-200 shadow-sm" defaultValue="Last 30 Days">
                       <option>Last 30 Days</option>
                       <option>Month to Date</option>
                       <option>Last Month</option>
@@ -171,9 +193,7 @@ export default function Reports() {
             
             <CardContent>
               {loading ? (
-                <div className="flex justify-center p-8">
-                  <div className="w-8 h-8 border-4 border-accent-primary border-t-transparent rounded-full animate-spin"></div>
-                </div>
+                <SkeletonTable rows={3} cols={3} />
               ) : (
                 <DataTable 
                   columns={[

@@ -31,12 +31,34 @@ import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import Landing from './pages/Landing';
 
+// Admin Pages
+import AdminDashboard from './pages/admin/AdminDashboard';
+import UserManagement from './pages/admin/UserManagement';
+import AdminAuditLogs from './pages/admin/AdminAuditLogs';
+import AdminSettings from './pages/admin/AdminSettings';
+
 // Protected Route Wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const isAuthenticated = useStore((state) => state.isAuthenticated);
   
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  return children;
+};
+
+// Protected Admin Route Wrapper
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const isAuthenticated = useStore((state) => state.isAuthenticated);
+  const user = useStore((state) => state.user);
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user?.role !== 'ADMIN') {
+    return <Navigate to="/unauthorized" replace />;
   }
 
   return children;
@@ -129,9 +151,15 @@ function App() {
 
         // Phase 2: Core analytics data
         if (isCancelled) return;
+        const today = new Date();
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(today.getDate() - 30);
+        const startStr = thirtyDaysAgo.toISOString().split('T')[0];
+        const endStr = today.toISOString().split('T')[0];
+
         await Promise.all([
-          costService.getBreakdown(),
-          costService.getCosts(),
+          costService.getBreakdown(startStr, endStr),
+          costService.getCosts(startStr, endStr),
         ]);
 
         // Stagger Phase 3 by 300ms
@@ -149,9 +177,7 @@ function App() {
           budgetService.getBudgets(),
           recommendationService.getRecommendations(),
           recommendationService.getSummary(),
-          recommendationService.getIdleResources(),
           anomalyService.getAnomalies(),
-          anomalyService.getSummary(),
           aiService.getForecasts(),
           reportService.getReports(),
           settingsService.getSettings(),
@@ -206,6 +232,19 @@ function App() {
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/profile" element={<Profile />} />
+        </Route>
+        
+        {/* Protected Admin Routes */}
+        <Route element={
+          <AdminRoute>
+            <Layout />
+          </AdminRoute>
+        }>
+          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/users" element={<UserManagement />} />
+          <Route path="/admin/audit-logs" element={<AdminAuditLogs />} />
+          <Route path="/admin/settings" element={<AdminSettings />} />
         </Route>
         
         {/* Fallback */}

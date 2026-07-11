@@ -64,9 +64,19 @@ class Settings(BaseSettings):
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE: int = 100
 
+    # Whitelist of Reviewer accounts for Demo Mode (comma-separated)
+    REVIEWER_EMAILS: str = "reviewer1@example.com,reviewer2@example.com,qa@example.com,faculty@example.com"
+
+    # Seeding development admin account (disabled in production or if set to False)
+    SEED_DEV_ADMIN: bool = True
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
+
+    @property
+    def reviewer_emails_list(self) -> list[str]:
+        return [email.strip().lower() for email in self.REVIEWER_EMAILS.split(",") if email.strip()]
 
     @property
     def is_sqlite(self) -> bool:

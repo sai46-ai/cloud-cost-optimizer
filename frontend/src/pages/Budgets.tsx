@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { budgetService } from '../services/api';
 import { formatCurrency } from '../lib/utils';
 import { Bell, Plus, Edit2, Trash2, Wallet, X } from 'lucide-react';
@@ -10,11 +10,15 @@ import useStore from '../store';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import AWSOnboardingState from '../components/ui/AWSOnboardingState';
+import AWSErrorState from '../components/ui/AWSErrorState';
+import EmptyState from '../components/ui/EmptyState';
 
 export default function Budgets() {
   const [budgets, setBudgets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const { addToast } = useStore();
+  const [hasAWSError, setHasAWSError] = useState(false);
+  const { addToast, user } = useStore();
 
   // Modals state
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -32,20 +36,30 @@ export default function Budgets() {
   const [threshold100, setThreshold100] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
+    if (user && !user.is_demo_mode && !user.is_aws_connected) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setHasAWSError(false);
     try {
       const data = await budgetService.getBudgets();
       setBudgets(data);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to load budgets:", error);
+      if (error.message && (error.message.includes("AWS_ERROR") || error.message.includes("AWS") || error.message.includes("credentials") || error.message.includes("502"))) {
+        setHasAWSError(true);
+      }
     } finally {
       setLoading(false);
     }
-  }
+  }, [user]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   const openCreateModal = () => {
     setName('');
@@ -161,6 +175,14 @@ export default function Budgets() {
     return <Badge variant="healthy">On Track</Badge>;
   };
 
+  if (user && !user.is_demo_mode && !user.is_aws_connected) {
+    return <AWSOnboardingState />;
+  }
+
+  if (hasAWSError) {
+    return <AWSErrorState onRetry={loadData} isLoading={loading} />;
+  }
+
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
@@ -262,11 +284,16 @@ export default function Budgets() {
         })}
 
         {budgets.length === 0 && (
-          <div className="col-span-full border border-dashed border-border-primary rounded-xl p-12 flex flex-col items-center justify-center bg-background-secondary/50">
-            <Wallet size={48} className="text-text-muted mb-4" />
-            <h3 className="text-lg font-medium mb-2 text-text-primary">No Budgets Found</h3>
-            <p className="max-w-md text-center mb-6 text-text-secondary">Create a budget to track spending for specific services or your entire account.</p>
-            <Button onClick={openCreateModal}><Plus size={18} className="mr-2" /> Create First Budget</Button>
+          <div className="col-span-full">
+            <EmptyState 
+              icon={<Wallet size={20} />} 
+              title="No Budgets Found" 
+              description="Create a budget to track spending for specific services or your entire AWS cloud account."
+              action={{
+                label: "Create First Budget",
+                onClick: openCreateModal
+              }}
+            />
           </div>
         )}
       </motion.div>
@@ -305,7 +332,7 @@ export default function Budgets() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-text-primary">Period</label>
                     <select 
-                      className="w-full h-10 px-3 py-2 rounded-md border border-border-primary bg-background-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors text-text-primary" 
+                      className="flex h-10 w-full rounded-lg border border-border-primary bg-background-primary px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:border-accent-primary focus-visible:ring-2 focus-visible:ring-accent-primary/20 disabled:cursor-not-allowed disabled:opacity-55 transition-all duration-200 shadow-sm" 
                       value={period} 
                       onChange={(e) => setPeriod(e.target.value)}
                     >
@@ -375,7 +402,7 @@ export default function Budgets() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-text-primary">Period</label>
                     <select 
-                      className="w-full h-10 px-3 py-2 rounded-md border border-border-primary bg-background-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors text-text-primary" 
+                      className="flex h-10 w-full rounded-lg border border-border-primary bg-background-primary px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:border-accent-primary focus-visible:ring-2 focus-visible:ring-accent-primary/20 disabled:cursor-not-allowed disabled:opacity-55 transition-all duration-200 shadow-sm" 
                       value={period} 
                       onChange={(e) => setPeriod(e.target.value)}
                     >

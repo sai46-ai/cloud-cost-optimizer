@@ -20,6 +20,8 @@ from sqlalchemy.orm import Session
 
 from app.models.cost_record import CostRecord
 from app.models.anomaly import Anomaly
+from app.models.user import User
+from app.models.aws_account import AWSAccount
 
 logger = logging.getLogger(__name__)
 
@@ -30,63 +32,35 @@ class AnomalyDetector:
     def __init__(self, db: Session):
         self.db = db
 
-    def detect_anomalies(
-        self, user_id: str, contamination: float = 0.08
-    ) -> List[Anomaly]:
-        """
-        Run anomaly detection on cost records for a specific user.
-        Enhanced from original implementation with:
-        - Feature engineering (rolling averages, day-of-week, etc.)
-        - Severity scoring based on deviation magnitude
-        - Root cause analysis
-        """
-        records = (
-            self.db.query(CostRecord)
-            .filter(CostRecord.user_id == user_id)
-            .order_by(CostRecord.date)
-            .all()
-        )
-        # If ML is not available or insufficient data, return empty list (zero-mock policy)
+    def _run_detection_on_records(self, records, contamination: float = 0.08) -> List[Anomaly]:
         if not ML_AVAILABLE or len(records) < 14:
-            logger.warning(
-                "Insufficient data or ML libraries missing for anomaly detection"
-            )
-            return self.get_anomalies(user_id)
+            return []
 
-        # Build DataFrame
         df = pd.DataFrame(
             [
                 {
-                    "id": r.id,
-                    "amount": r.amount,
-                    "date": r.date,
-                    "service": r.service,
-                    "region": r.region,
+                    "id": getattr(r, "id", f"live-{idx}") if not isinstance(r, dict) else r.get("id", f"live-{idx}"),
+                    "amount": getattr(r, "amount", 0.0) if not isinstance(r, dict) else r.get("amount", 0.0),
+                    "date": getattr(r, "date", date.today()) if not isinstance(r, dict) else r.get("date", date.today()),
+                    "service": getattr(r, "service", "") if not isinstance(r, dict) else r.get("service", ""),
+                    "region": getattr(r, "region", "us-east-1") if not isinstance(r, dict) else r.get("region", "us-east-1"),
                 }
-                for r in records
+                for idx, r in enumerate(records)
             ]
         )
 
         detected_anomalies = []
-
-        # Per-service anomaly detection (preserved from original)
         for service in df["service"].unique():
             sdf = df[df["service"] == service].copy()
             if len(sdf) < 10:
                 continue
 
-            # Feature engineering
             sdf = sdf.sort_values("date")
-            sdf["rolling_mean_7d"] = (
-                sdf["amount"].rolling(window=7, min_periods=1).mean()
-            )
-            sdf["rolling_std_7d"] = (
-                sdf["amount"].rolling(window=7, min_periods=1).std().fillna(0)
-            )
+            sdf["rolling_mean_7d"] = sdf["amount"].rolling(window=7, min_periods=1).mean()
+            sdf["rolling_std_7d"] = sdf["amount"].rolling(window=7, min_periods=1).std().fillna(0)
             sdf["deviation"] = (sdf["amount"] - sdf["rolling_mean_7d"]).abs()
             sdf["day_of_week"] = pd.to_datetime(sdf["date"]).dt.dayofweek
 
-            # Features for Isolation Forest
             features = sdf[
                 [
                     "amount",
@@ -97,7 +71,6 @@ class AnomalyDetector:
                 ]
             ].fillna(0)
 
-            # Isolation Forest (enhanced from original)
             model = IsolationForest(
                 contamination=contamination,
                 random_state=42,
@@ -107,37 +80,20 @@ class AnomalyDetector:
             sdf["anomaly_score"] = model.fit_predict(features)
             sdf["decision_score"] = model.decision_function(features)
 
-            # Process detected anomalies
             anomaly_rows = sdf[sdf["anomaly_score"] == -1]
-            if anomaly_rows.empty:
-                continue
-
-            anomaly_record_ids = anomaly_rows["id"].tolist()
-            existing_anomalies = {
-                r[0]
-                for r in self.db.query(Anomaly.cost_record_id)
-                .filter(Anomaly.cost_record_id.in_(anomaly_record_ids))
-                .all()
-            }
-
             for _, row in anomaly_rows.iterrows():
-                # Skip if already detected
-                if row["id"] in existing_anomalies:
-                    continue
-
-                # Calculate severity based on deviation from mean
                 mean_cost = sdf["amount"].mean()
                 std_cost = sdf["amount"].std() or 1.0
                 z_score = abs(row["amount"] - mean_cost) / std_cost
+                if z_score < 2.0:
+                    continue
                 severity = self._calculate_severity(z_score)
                 impact = round(abs(row["amount"] - mean_cost), 2)
-
-                # Root cause analysis
                 root_cause = self._determine_root_cause(row, sdf)
 
                 anomaly = Anomaly(
-                    cost_record_id=row["id"],
-                    date=row["date"],
+                    cost_record_id=str(row["id"]),
+                    date=row["date"] if isinstance(row["date"], date) else datetime.strptime(str(row["date"]), "%Y-%m-%d").date(),
                     service=service,
                     severity=severity,
                     impact_amount=impact,
@@ -150,21 +106,64 @@ class AnomalyDetector:
                     detected_at=datetime.now(timezone.utc),
                 )
                 detected_anomalies.append(anomaly)
-                self.db.add(anomaly)
-
-        self.db.commit()
-        logger.info(f"Detected {len(detected_anomalies)} new anomalies")
         return detected_anomalies
 
+    def detect_anomalies(
+        self, user_id: str, contamination: float = 0.08
+    ) -> List[Anomaly]:
+        """Run anomaly detection dynamically based on user type."""
+        from datetime import timedelta
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return []
+
+        # 1. Reviewer Account (Demo Mode)
+        if user.is_demo_mode:
+            records = (
+                self.db.query(CostRecord)
+                .filter(CostRecord.user_id == user_id)
+                .order_by(CostRecord.date)
+                .all()
+            )
+            anomalies = self._run_detection_on_records(records, contamination)
+            for a in anomalies:
+                exists = self.db.query(Anomaly).filter_by(cost_record_id=a.cost_record_id).first()
+                if not exists:
+                    self.db.add(a)
+            self.db.commit()
+            return anomalies
+
+        # 2. Normal User (Live AWS CE)
+        else:
+            if not user.is_aws_connected:
+                return []
+            aws_account = self.db.query(AWSAccount).filter(AWSAccount.org_id == user.org_id, AWSAccount.is_active.is_(True)).first()
+            if not aws_account:
+                return []
+
+            today = date.today()
+            start_date = today - timedelta(days=30)
+            from app.services.aws_cost_explorer import cost_explorer_service
+            records = cost_explorer_service.get_live_costs(aws_account, start_date, today)
+
+            return self._run_detection_on_records(records, contamination)
+
     def get_anomalies(self, user_id: str, limit: int = 50) -> List[Anomaly]:
-        return (
-            self.db.query(Anomaly)
-            .join(CostRecord, Anomaly.cost_record_id == CostRecord.id)
-            .filter(CostRecord.user_id == user_id)
-            .order_by(Anomaly.detected_at.desc())
-            .limit(limit)
-            .all()
-        )
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return []
+
+        if user.is_demo_mode:
+            return (
+                self.db.query(Anomaly)
+                .join(CostRecord, Anomaly.cost_record_id == CostRecord.id)
+                .filter(CostRecord.user_id == user_id)
+                .order_by(Anomaly.detected_at.desc())
+                .limit(limit)
+                .all()
+            )
+        else:
+            return self.detect_anomalies(user_id)[:limit]
 
     def get_anomaly_summary(self, user_id: str) -> dict:
         anomalies = self.get_anomalies(user_id, limit=500)

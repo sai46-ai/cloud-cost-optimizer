@@ -7,6 +7,8 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from app.models.budget import Budget
+from app.models.user import User
+from app.models.aws_account import AWSAccount
 from app.repositories.budget_repository import BudgetRepository
 from app.core.exceptions import EntityNotFoundError
 
@@ -79,17 +81,38 @@ class BudgetService:
         elif "dynamodb" in name_lower or "dynamo" in name_lower:
             service_filter = "Amazon DynamoDB"
 
-        # Query cost records
-        from app.models.cost_record import CostRecord
-        from sqlalchemy import func
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return 0.0
 
-        query = self.db.query(func.sum(CostRecord.amount)).filter(
-            CostRecord.user_id == user_id,
-            CostRecord.date >= start_date,
-            CostRecord.date <= end_date,
-        )
-        if service_filter:
-            query = query.filter(CostRecord.service == service_filter)
+        # If user is a reviewer (demo mode), query the DB cost records
+        if user.is_demo_mode:
+            from app.models.cost_record import CostRecord
+            from sqlalchemy import func
 
-        result = query.scalar()
-        return round(result or 0.0, 2)
+            query = self.db.query(func.sum(CostRecord.amount)).filter(
+                CostRecord.user_id == user_id,
+                CostRecord.date >= start_date,
+                CostRecord.date <= end_date,
+            )
+            if service_filter:
+                query = query.filter(CostRecord.service == service_filter)
+
+            result = query.scalar()
+            return round(result or 0.0, 2)
+
+        # For normal users, fetch live spend from AWS CE
+        else:
+            if not user.is_aws_connected:
+                return 0.0
+
+            aws_account = self.db.query(AWSAccount).filter(AWSAccount.org_id == user.org_id, AWSAccount.is_active.is_(True)).first()
+            if not aws_account:
+                return 0.0
+
+            from app.services.aws_cost_explorer import cost_explorer_service
+            try:
+                return cost_explorer_service.get_live_spent(aws_account, start_date, end_date, service_filter)
+            except Exception:
+                # If query fails, let's return 0.0 to avoid breaking user budgets loading, or propagate the error
+                return 0.0

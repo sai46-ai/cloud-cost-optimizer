@@ -7,7 +7,10 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 
 from app.models.recommendation import Recommendation
+from app.models.user import User
+from app.models.aws_account import AWSAccount
 from app.repositories.base import BaseRepository
+from datetime import datetime, timedelta
 from app.schemas.recommendation import IdleResource, IdleResourceSummary
 
 
@@ -19,14 +22,20 @@ class RecommendationService:
     async def get_recommendations(
         self, user_id: Optional[str] = None
     ) -> List[Recommendation]:
-        if user_id:
+        if not user_id:
+            return []
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return []
+
+        # 1. Reviewer Account (Demo Mode)
+        if user.is_demo_mode:
             recs = (
                 self.db.query(Recommendation)
                 .filter(Recommendation.user_id == user_id)
                 .all()
             )
             if not recs:
-                # Dynamically evaluate & generate baseline recommendations for user
                 self._generate_default_recommendations(user_id)
                 recs = (
                     self.db.query(Recommendation)
@@ -34,14 +43,84 @@ class RecommendationService:
                     .all()
                 )
             return recs
-        return self.rec_repo.get_all(limit=200)
+
+        # 2. Normal User
+        else:
+            if not user.is_aws_connected:
+                return []
+            aws_account = self.db.query(AWSAccount).filter(AWSAccount.org_id == user.org_id, AWSAccount.is_active.is_(True)).first()
+            if not aws_account:
+                return []
+
+            from app.services.aws_cost_explorer import cost_explorer_service
+            raw_recs = cost_explorer_service.fetch_live_rightsizing_recommendations(aws_account)
+            
+            recs_objs = []
+            for r in raw_recs:
+                recs_objs.append(
+                    Recommendation(
+                        id=r["resource_id"],
+                        user_id=user_id,
+                        service=r["service"],
+                        resource_id=r["resource_id"],
+                        resource_type=r["resource_type"],
+                        category=r["category"],
+                        recommendation=r["recommendation"],
+                        current_cost=r["current_cost"],
+                        optimized_cost=r["optimized_cost"],
+                        monthly_savings=r["monthly_savings"],
+                        annual_savings=r["annual_savings"],
+                        priority=r["priority"],
+                        status=r["status"],
+                        difficulty=r["difficulty"],
+                    )
+                )
+            return recs_objs
 
     def get_recommendation_summary(self, user_id: str) -> dict:
-        recs = (
-            self.db.query(Recommendation)
-            .filter(Recommendation.user_id == user_id)
-            .all()
-        )
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return {
+                "total_recommendations": 0,
+                "total_monthly_savings": 0.0,
+                "total_annual_savings": 0.0,
+                "by_priority": {},
+                "by_category": {},
+                "by_status": {},
+            }
+
+        # 1. Reviewer Account (Demo Mode)
+        if user.is_demo_mode:
+            recs = (
+                self.db.query(Recommendation)
+                .filter(Recommendation.user_id == user_id)
+                .all()
+            )
+        # 2. Normal User
+        else:
+            if not user.is_aws_connected:
+                return {
+                    "total_recommendations": 0,
+                    "total_monthly_savings": 0.0,
+                    "total_annual_savings": 0.0,
+                    "by_priority": {},
+                    "by_category": {},
+                    "by_status": {},
+                }
+            aws_account = self.db.query(AWSAccount).filter(AWSAccount.org_id == user.org_id, AWSAccount.is_active.is_(True)).first()
+            if not aws_account:
+                return {
+                    "total_recommendations": 0,
+                    "total_monthly_savings": 0.0,
+                    "total_annual_savings": 0.0,
+                    "by_priority": {},
+                    "by_category": {},
+                    "by_status": {},
+                }
+            from app.services.aws_cost_explorer import cost_explorer_service
+            raw_recs = cost_explorer_service.fetch_live_rightsizing_recommendations(aws_account)
+            recs = [Recommendation(user_id=user_id, **r) for r in raw_recs]
+
         total_monthly = sum(
             r.monthly_savings for r in recs if r.status in ["pending", "accepted"]
         )
@@ -71,11 +150,9 @@ class RecommendationService:
         rec = self.rec_repo.get_by_id(rec_id)
         if not rec:
             from app.core.exceptions import EntityNotFoundError
-
             raise EntityNotFoundError("Recommendation", rec_id)
         if rec.user_id != user_id:
             from app.core.exceptions import AuthorizationError
-
             raise AuthorizationError(
                 "You do not have permission to modify this recommendation"
             )
@@ -83,55 +160,62 @@ class RecommendationService:
 
     def get_idle_resources(self, user_id: str) -> IdleResourceSummary:
         """Fetch identified idle / underutilized compute, database, and storage assets."""
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user or not user.is_demo_mode:
+            # Normal users should not see fabricated idle resources
+            return IdleResourceSummary(
+                total_idle=0,
+                total_savings=0.0,
+                resources=[],
+                by_type={},
+            )
+
         idle_items = [
             IdleResource(
-                id="idle-ec2-01",
                 resource_id="i-0a8b9c1d2e3f4g5h6",
+                resource_type="EC2",
                 resource_name="dev-worker-node-03",
-                service="Amazon EC2",
                 region="us-east-1",
-                resource_type="t3.xlarge",
-                metrics={"cpu_utilization_avg": "2.4%", "network_in_out": "12MB/day"},
-                monthly_waste=122.64,
-                recommended_action="Terminate idle development node or downscale to t3.micro",
-                days_idle=14,
+                current_cost=122.64,
+                estimated_savings=122.64,
+                reason="Terminate idle development node or downscale to t3.micro (idle for 14 days)",
+                details={"cpu_utilization_avg": "2.4%", "network_in_out": "12MB/day"},
+                detected_at=datetime.utcnow() - timedelta(days=14),
             ),
             IdleResource(
-                id="idle-ebs-01",
                 resource_id="vol-0123456789abcdef0",
+                resource_type="EBS",
                 resource_name="unattached-backup-vol",
-                service="Amazon EBS",
                 region="us-east-1",
-                resource_type="gp3 (500GB)",
-                metrics={"iops": "0", "attached": False},
-                monthly_waste=40.00,
-                recommended_action="Create snapshot and delete unattached EBS volume",
-                days_idle=28,
+                current_cost=40.00,
+                estimated_savings=40.00,
+                reason="Create snapshot and delete unattached EBS volume (idle for 28 days)",
+                details={"iops": "0", "attached": False},
+                detected_at=datetime.utcnow() - timedelta(days=28),
             ),
             IdleResource(
-                id="idle-rds-01",
                 resource_id="rds-staging-replica-01",
+                resource_type="RDS",
                 resource_name="staging-db-read-replica",
-                service="Amazon RDS",
                 region="us-west-2",
-                resource_type="db.r5.large",
-                metrics={"connections_avg": "0", "read_iops": "0"},
-                monthly_waste=175.20,
-                recommended_action="Pause or terminate unused staging database replica",
-                days_idle=21,
+                current_cost=175.20,
+                estimated_savings=175.20,
+                reason="Pause or terminate unused staging database replica (idle for 21 days)",
+                details={"connections_avg": "0", "read_iops": "0"},
+                detected_at=datetime.utcnow() - timedelta(days=21),
             ),
         ]
 
-        total_waste = sum(item.monthly_waste for item in idle_items)
+        total_savings = sum(item.estimated_savings for item in idle_items)
         by_type = {
-            "Amazon EC2": 1,
-            "Amazon EBS": 1,
-            "Amazon RDS": 1,
+            "EC2": 1,
+            "EBS": 1,
+            "RDS": 1,
         }
 
         return IdleResourceSummary(
             total_idle=len(idle_items),
-            total_savings=round(total_waste, 2),
+            total_savings=round(total_savings, 2),
             resources=idle_items,
             by_type=by_type,
         )

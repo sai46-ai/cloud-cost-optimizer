@@ -9,8 +9,10 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-connect_args = {}
-engine_kwargs = {
+from typing import Dict, Any
+
+connect_args: Dict[str, Any] = {}
+engine_kwargs: Dict[str, Any] = {
     "pool_pre_ping": True,
     "echo": settings.DEBUG,
 }
@@ -75,6 +77,28 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    """Create all database tables. Used for development / initial setup."""
+    """Create all database tables and run programmatic migrations."""
     import app.models  # Ensure models are registered on Base metadata
     Base.metadata.create_all(bind=engine)
+
+    # Programmatic schema migration for SQLite/Postgres to preserve existing users
+    from sqlalchemy import inspect, text
+    try:
+        inspector = inspect(engine)
+        if "users" in inspector.get_table_names():
+            columns = [col["name"] for col in inspector.get_columns("users")]
+            with engine.begin() as conn:
+                if "account_status" not in columns:
+                    logger.info("Database migration: adding column 'account_status' to users table")
+                    # SQLite supports ALTER TABLE ADD COLUMN
+                    conn.execute(text("ALTER TABLE users ADD COLUMN account_status VARCHAR(20) DEFAULT 'active'"))
+                if "last_login" not in columns:
+                    logger.info("Database migration: adding column 'last_login' to users table")
+                    conn.execute(text("ALTER TABLE users ADD COLUMN last_login TIMESTAMP"))
+                
+                # Assign USER as the default role for existing accounts
+                logger.info("Database migration: migrating legacy user roles to uppercase")
+                conn.execute(text("UPDATE users SET role = 'USER' WHERE role IN ('viewer', 'manager', 'user', 'viewers') OR role IS NULL"))
+                conn.execute(text("UPDATE users SET role = 'ADMIN' WHERE role IN ('admin', 'admins')"))
+    except Exception as e:
+        logger.warning("Programmatic database schema upgrade warning: %s", e)

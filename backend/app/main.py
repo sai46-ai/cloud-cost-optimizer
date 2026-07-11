@@ -26,6 +26,7 @@ from app.api.v1 import (
     settings as settings_api,
     reports,
     audit_logs,
+    admin,
 )
 
 from app.core.logging import configure_logging
@@ -47,6 +48,15 @@ async def lifespan(app: FastAPI):
     # Initialize database tables
     init_db()
     logger.info("✅ Database initialized")
+
+    if settings.SEED_DEV_ADMIN:
+        from app.database import SessionLocal
+        from app.core.seed import seed_development_admin
+        db = SessionLocal()
+        try:
+            seed_development_admin(db)
+        finally:
+            db.close()
 
     # Security configuration checks
     if settings.ENVIRONMENT.lower() == "production":
@@ -143,6 +153,9 @@ def create_app() -> FastAPI:
     app.include_router(reports.router, prefix=f"{prefix}/reports", tags=["Reports"])
     app.include_router(
         audit_logs.router, prefix=f"{prefix}/audit-logs", tags=["Audit Logs"]
+    )
+    app.include_router(
+        admin.router, prefix=f"{prefix}/admin", tags=["Admin Panel"]
     )
 
     # Static files mounting

@@ -330,7 +330,7 @@ export function GlobalCanvas() {
         inset: 0,
         width: '100%',
         height: '100vh',
-        zIndex: 0,
+        zIndex: 1,
         pointerEvents: 'none',
       }}
     >
@@ -339,14 +339,13 @@ export function GlobalCanvas() {
         dpr={[1, 2]}
         gl={{
           antialias: true,
-          alpha: false,
+          alpha: true,
           powerPreference: 'high-performance',
           outputColorSpace: THREE.SRGBColorSpace,
         }}
         style={{ background: 'transparent' }}
       >
-        {/* Gradient background sky */}
-        <SkyGradient theme={theme} />
+        {/* Gradient background sky is removed to allow background video to show */}
 
         {/* Ambient lighting — soft, neutral */}
         <ambientLight intensity={1.2} color="#f0f4ff" />

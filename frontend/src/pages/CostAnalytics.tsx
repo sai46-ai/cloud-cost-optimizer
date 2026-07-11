@@ -12,10 +12,14 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card'
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { AnalyticsNetworkGraph } from '../components/3d/Internal3DElements';
+import AWSOnboardingState from '../components/ui/AWSOnboardingState';
+import AWSErrorState from '../components/ui/AWSErrorState';
+
 export default function CostAnalytics() {
   const [costs, setCosts] = useState<any[]>([]);
   const [breakdown, setBreakdown] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [hasAWSError, setHasAWSError] = useState(false);
   
   // Default dates
   const defaultStartDate = () => {
@@ -36,10 +40,16 @@ export default function CostAnalytics() {
     startDate !== defaultStartDate() || 
     endDate !== defaultEndDate();
 
-  const { theme, addToast } = useStore();
+  const { theme, addToast, user } = useStore();
 
   const loadData = useCallback(async (startStr?: string, endStr?: string, serviceStr?: string) => {
+    if (user && !user.is_demo_mode && !user.is_aws_connected) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
+    setHasAWSError(false);
     try {
       const activeSvc = serviceStr === 'All Services' ? undefined : serviceStr;
       const [costData, breakdownData] = await Promise.all([
@@ -48,17 +58,21 @@ export default function CostAnalytics() {
       ]);
       setCosts(costData);
       setBreakdown(breakdownData);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to load cost analytics:", error);
-      addToast("Failed to load cost data", "error");
+      if (error.message && (error.message.includes("AWS_ERROR") || error.message.includes("AWS") || error.message.includes("credentials") || error.message.includes("502"))) {
+        setHasAWSError(true);
+      } else {
+        addToast("Failed to load cost data", "error");
+      }
     } finally {
       setLoading(false);
     }
-  }, [addToast]);
+  }, [addToast, user]);
 
   useEffect(() => {
     loadData(startDate, endDate, selectedService);
-  }, [loadData, startDate, endDate, selectedService]);
+  }, [loadData, startDate, endDate, selectedService, user?.is_aws_connected, user?.is_demo_mode]);
 
   const handleApplyFilters = (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,6 +99,14 @@ export default function CostAnalytics() {
       setIsExporting(false);
     }
   };
+
+  if (user && !user.is_demo_mode && !user.is_aws_connected) {
+    return <AWSOnboardingState />;
+  }
+
+  if (hasAWSError) {
+    return <AWSErrorState onRetry={() => loadData(startDate, endDate, selectedService)} isLoading={loading} />;
+  }
 
   if (loading && costs.length === 0) {
     return (
@@ -186,20 +208,22 @@ export default function CostAnalytics() {
 
       <div className={`transition-opacity duration-200 ${loading ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
         <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Daily Spending by Service (Last 14 Days)</CardTitle>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-bold text-text-primary">Daily Spending by Service (Last 14 Days)</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[400px] w-full min-h-[400px]">
-              <ResponsiveContainer width="100%" height={400} minWidth={0}>
-                <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#2a2a3c' : '#e5e5ea'} />
-                  <XAxis dataKey="date" tickLine={false} axisLine={false} />
-                  <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
+            <div className="h-[380px] w-full min-h-[380px]">
+              <ResponsiveContainer width="100%" height={380} minWidth={0}>
+                <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.05)'} />
+                  <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fill: 'var(--text-muted)', fontSize: 10, fontWeight: 500 }} />
+                  <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} tick={{ fill: 'var(--text-muted)', fontSize: 10, fontWeight: 500 }} />
                   <RechartsTooltip 
-                    contentStyle={{ backgroundColor: theme === 'dark' ? '#1e1e2e' : '#FAFAFA', borderColor: theme === 'dark' ? '#2a2a3c' : '#e5e5ea', borderRadius: '8px' }}
-                    cursor={{ fill: theme === 'dark' ? '#2a2a3c' : '#f3f4f6' }}
-                    formatter={(value: any) => formatCurrency(value as number)}
+                    contentStyle={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-primary)', borderRadius: '12px', boxShadow: 'var(--shadow-premium)' }}
+                    labelStyle={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: '600', marginBottom: '4px' }}
+                    itemStyle={{ fontSize: '11px', fontWeight: '500' }}
+                    cursor={{ fill: theme === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(15,23,42,0.03)' }}
+                    formatter={(value: any) => [formatCurrency(value as number)]}
                   />
                   <Legend />
                   {topServices.map((service: string, index: number) => (
@@ -213,65 +237,61 @@ export default function CostAnalytics() {
         </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Service Breakdown</CardTitle>
+          <Card className="overflow-hidden">
+            <CardHeader className="pb-3 bg-background-elevated/40 border-b border-border-primary/60">
+              <CardTitle className="text-base font-bold text-text-primary">Service Breakdown</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-text-secondary">
-                  <thead className="text-xs uppercase bg-background-elevated text-text-muted">
-                    <tr>
-                      <th className="px-6 py-3">Service</th>
-                      <th className="px-6 py-3">Total Cost</th>
-                      <th className="px-6 py-3">% of Total</th>
-                    </tr>
-                  </thead>
-                  <motion.tbody variants={tableContainerVariants} initial="hidden" animate="show" key={costs.length} className="divide-y divide-border-primary">
-                    {breakdown?.by_service.map((item: any, idx: number) => (
-                      <motion.tr variants={tableRowVariants} key={item.service} className="hover:bg-background-elevated transition-colors">
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2 text-text-primary">
-                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: colors[idx % colors.length] }}></div>
-                            {item.service}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 font-medium text-text-primary">{formatCurrency(item.amount)}</td>
-                        <td className="px-6 py-4">{item.percentage.toFixed(1)}%</td>
-                      </motion.tr>
-                    ))}
-                  </motion.tbody>
-                </table>
-              </div>
-            </CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-text-secondary">
+                <thead className="text-[10px] uppercase font-bold tracking-wider bg-background-elevated text-text-muted border-b border-border-primary">
+                  <tr>
+                    <th className="px-5 py-3">Service</th>
+                    <th className="px-5 py-3">Total Cost</th>
+                    <th className="px-5 py-3">% of Total</th>
+                  </tr>
+                </thead>
+                <motion.tbody variants={tableContainerVariants} initial="hidden" animate="show" key={costs.length} className="divide-y divide-border-primary/50 bg-background-secondary/20">
+                  {breakdown?.by_service.map((item: any, idx: number) => (
+                    <motion.tr variants={tableRowVariants} key={item.service} className="hover:bg-background-elevated/60 transition-colors">
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2.5 text-text-primary font-medium">
+                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors[idx % colors.length] }}></div>
+                          {item.service}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 font-bold text-text-primary">{formatCurrency(item.amount)}</td>
+                      <td className="px-5 py-3.5 font-medium">{item.percentage.toFixed(1)}%</td>
+                    </motion.tr>
+                  ))}
+                </motion.tbody>
+              </table>
+            </div>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Region Breakdown</CardTitle>
+          <Card className="overflow-hidden">
+            <CardHeader className="pb-3 bg-background-elevated/40 border-b border-border-primary/60">
+              <CardTitle className="text-base font-bold text-text-primary">Region Breakdown</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-text-secondary">
-                  <thead className="text-xs uppercase bg-background-elevated text-text-muted">
-                    <tr>
-                      <th className="px-6 py-3">Region</th>
-                      <th className="px-6 py-3">Total Cost</th>
-                      <th className="px-6 py-3">% of Total</th>
-                    </tr>
-                  </thead>
-                  <motion.tbody variants={tableContainerVariants} initial="hidden" animate="show" key={costs.length + 1} className="divide-y divide-border-primary">
-                    {breakdown?.by_region.map((item: any) => (
-                      <motion.tr variants={tableRowVariants} key={item.region} className="hover:bg-background-elevated transition-colors">
-                        <td className="px-6 py-4"><Badge variant="info" showIcon={false}>{item.region}</Badge></td>
-                        <td className="px-6 py-4 font-medium text-text-primary">{formatCurrency(item.amount)}</td>
-                        <td className="px-6 py-4">{item.percentage.toFixed(1)}%</td>
-                      </motion.tr>
-                    ))}
-                  </motion.tbody>
-                </table>
-              </div>
-            </CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-text-secondary">
+                <thead className="text-[10px] uppercase font-bold tracking-wider bg-background-elevated text-text-muted border-b border-border-primary">
+                  <tr>
+                    <th className="px-5 py-3">Region</th>
+                    <th className="px-5 py-3">Total Cost</th>
+                    <th className="px-5 py-3">% of Total</th>
+                  </tr>
+                </thead>
+                <motion.tbody variants={tableContainerVariants} initial="hidden" animate="show" key={costs.length + 1} className="divide-y divide-border-primary/50 bg-background-secondary/20">
+                  {breakdown?.by_region.map((item: any) => (
+                    <motion.tr variants={tableRowVariants} key={item.region} className="hover:bg-background-elevated/60 transition-colors">
+                      <td className="px-5 py-3.5 font-medium"><Badge variant="info" showIcon={false}>{item.region}</Badge></td>
+                      <td className="px-5 py-3.5 font-bold text-text-primary">{formatCurrency(item.amount)}</td>
+                      <td className="px-5 py-3.5 font-medium">{item.percentage.toFixed(1)}%</td>
+                    </motion.tr>
+                  ))}
+                </motion.tbody>
+              </table>
+            </div>
           </Card>
         </div>
       </div>
@@ -300,7 +320,7 @@ export default function CostAnalytics() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-text-primary">Service Filter</label>
                   <select 
-                    className="w-full h-10 px-3 py-2 rounded-md border border-border-primary bg-background-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-transparent transition-colors" 
+                    className="flex h-10 w-full rounded-lg border border-border-primary bg-background-primary px-3 py-2 text-sm text-text-primary focus-visible:outline-none focus-visible:border-accent-primary focus-visible:ring-2 focus-visible:ring-accent-primary/20 disabled:cursor-not-allowed disabled:opacity-55 transition-all duration-200 shadow-sm" 
                     value={selectedService} 
                     onChange={(e) => setSelectedService(e.target.value)}
                   >

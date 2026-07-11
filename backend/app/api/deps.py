@@ -58,6 +58,11 @@ def require_role(*roles: str):
 
 
 # Role shortcuts
-require_admin = require_role("admin")
-require_manager = require_role("admin", "manager")
-require_viewer = require_role("admin", "manager", "viewer")
+require_admin = require_role("ADMIN")
+require_reviewer = require_role("ADMIN", "REVIEWER")
+require_user = require_role("ADMIN", "USER")
+require_any = require_role("ADMIN", "REVIEWER", "USER")
+
+# Legacy compatibility shortcuts mapped to any authenticated role
+require_manager = require_any
+require_viewer = require_any

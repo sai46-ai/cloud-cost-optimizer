@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -17,6 +17,9 @@ import ErrorState from '../components/ui/ErrorState';
 import { Card } from '../components/ui/Card';
 import { DashboardDataCube } from '../components/3d/Internal3DElements';
 
+import AWSOnboardingState from '../components/ui/AWSOnboardingState';
+import AWSErrorState from '../components/ui/AWSErrorState';
+
 const COLORS = ['#3b82f6', '#06b6d4', '#22c55e', '#f59e0b', '#ef4444'];
 
 export default function Dashboard() {
@@ -24,12 +27,19 @@ export default function Dashboard() {
   const [forecast, setForecast] = useState<any>(null);
   const [recs, setRecs] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [hasAWSError, setHasAWSError] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string>('');
-  const { theme } = useStore();
+  const { theme, user } = useStore();
   const navigate = useNavigate();
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    if (user && !user.is_demo_mode && !user.is_aws_connected) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
+    setHasAWSError(false);
     try {
       const [dashboardData, forecastData, recData] = await Promise.all([
         costService.getDashboard(),
@@ -44,16 +54,19 @@ export default function Dashboard() {
         ', ' + 
         new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to load dashboard data:", error);
+      if (error.message && (error.message.includes("AWS_ERROR") || error.message.includes("AWS") || error.message.includes("credentials") || error.message.includes("502"))) {
+        setHasAWSError(true);
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   if (loading) {
     return (
@@ -72,6 +85,14 @@ export default function Dashboard() {
         </div>
       </div>
     );
+  }
+
+  if (user && !user.is_demo_mode && !user.is_aws_connected) {
+    return <AWSOnboardingState />;
+  }
+
+  if (hasAWSError) {
+    return <AWSErrorState onRetry={loadData} isLoading={loading} />;
   }
 
   if (!metrics) {
@@ -194,102 +215,101 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         {/* Spending Trend */}
-        <Card className="p-6 transition-all duration-300 hover:shadow-lg lg:col-span-2">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold tracking-wider text-text-secondary uppercase">30-Day Spending Trend</h3>
+        <Card className="p-5 lg:col-span-2">
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="text-xs font-bold tracking-wider text-text-muted uppercase">30-Day Spending Trend</h3>
           </div>
           <div className="h-[300px] w-full min-h-[300px]">
             <ResponsiveContainer width="100%" height={300} minWidth={0}>
-              <AreaChart data={areaData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+              <AreaChart data={areaData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="var(--accent-primary)" stopOpacity={0.25}/>
+                    <stop offset="95%" stopColor="var(--accent-primary)" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? '#2a2a3c' : '#e5e5ea'} />
-                <XAxis dataKey="date" tickLine={false} axisLine={false} stroke="var(--text-muted)" />
-                <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} stroke="var(--text-muted)" />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.05)'} />
+                <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fill: 'var(--text-muted)', fontSize: 10, fontWeight: 500 }} />
+                <YAxis tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} tick={{ fill: 'var(--text-muted)', fontSize: 10, fontWeight: 500 }} />
                 <RechartsTooltip 
-                  contentStyle={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-primary)', borderRadius: '8px' }}
-                  itemStyle={{ color: '#3b82f6' }}
+                  contentStyle={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-primary)', borderRadius: '12px', boxShadow: 'var(--shadow-premium)' }}
+                  labelStyle={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: '600', marginBottom: '4px' }}
+                  itemStyle={{ color: 'var(--accent-primary)', fontSize: '12px', fontWeight: '500' }}
                   formatter={(value: any) => [formatCurrency(value as number), 'Spend']}
                 />
-                <Area type="monotone" dataKey="amount" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorAmount)" />
+                <Area type="monotone" dataKey="amount" stroke="var(--accent-primary)" strokeWidth={2.5} fillOpacity={1} fill="url(#colorAmount)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </Card>
 
         {/* AI Insights Preview */}
-        <Card className="p-6 transition-all duration-300 hover:shadow-lg flex flex-col">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold tracking-wider text-text-secondary uppercase">AI Action Items</h3>
-            <button aria-label="View all AI action items" className="text-accent-primary hover:text-accent-hover text-sm font-medium transition-colors" onClick={() => navigate('/ai-insights')}>View All</button>
+        <Card className="p-5 flex flex-col">
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="text-xs font-bold tracking-wider text-text-muted uppercase">AI Action Items</h3>
+            <button aria-label="View all AI action items" className="text-accent-primary hover:text-accent-hover text-xs font-semibold transition-colors cursor-pointer" onClick={() => navigate('/ai-insights')}>View All</button>
           </div>
-          <div className="flex-1 overflow-y-auto pr-1">
-            <div className="space-y-3">
-              {forecast?.next_month && (
-                <div 
-                  className="cursor-pointer p-4 rounded-xl border border-border-primary bg-background-primary hover:bg-background-elevated transition-all flex flex-col gap-2 group shadow-sm hover:shadow-md"
-                  onClick={() => navigate('/ai-insights')}
-                >
-                  <div className="flex items-center justify-between">
-                    <Badge variant="info">Forecast</Badge>
-                    <Badge variant="healthy" showIcon={false}>Active</Badge>
-                  </div>
-                  <p className="text-sm text-text-primary font-medium leading-relaxed group-hover:text-blue-400 transition-colors">
-                    Next month spending projected to be {formatCurrency(forecast.next_month.predicted_amount)}
-                  </p>
+          <div className="flex-1 overflow-y-auto pr-1 space-y-3">
+            {forecast?.next_month && (
+              <div 
+                className="cursor-pointer p-4 rounded-xl border border-border-primary bg-background-primary/40 hover:bg-background-elevated transition-all flex flex-col gap-2 group shadow-sm"
+                onClick={() => navigate('/ai-insights')}
+              >
+                <div className="flex items-center justify-between">
+                  <Badge variant="info">Forecast</Badge>
+                  <Badge variant="healthy" showIcon={false}>Active</Badge>
                 </div>
-              )}
-              {metrics?.active_anomalies > 0 && (
-                <div 
-                  className="cursor-pointer p-4 rounded-xl border border-border-primary bg-background-primary hover:bg-background-elevated transition-all flex flex-col gap-2 group shadow-sm hover:shadow-md"
-                  onClick={() => navigate('/analytics')}
-                >
-                  <div className="flex items-center justify-between">
-                    <Badge variant="critical">Anomaly</Badge>
-                    <Badge variant="critical" showIcon={false}>Unresolved</Badge>
-                  </div>
-                  <p className="text-sm text-text-primary font-medium leading-relaxed group-hover:text-red-400 transition-colors">
-                    Detected {metrics?.active_anomalies} unhandled anomalies
-                  </p>
+                <p className="text-xs text-text-primary font-medium leading-relaxed group-hover:text-accent-primary transition-colors">
+                  Next month spending projected to be {formatCurrency(forecast.next_month.predicted_amount)}
+                </p>
+              </div>
+            )}
+            {metrics?.active_anomalies > 0 && (
+              <div 
+                className="cursor-pointer p-4 rounded-xl border border-border-primary bg-background-primary/40 hover:bg-background-elevated transition-all flex flex-col gap-2 group shadow-sm"
+                onClick={() => navigate('/analytics')}
+              >
+                <div className="flex items-center justify-between">
+                  <Badge variant="critical">Anomaly</Badge>
+                  <Badge variant="critical" showIcon={false}>Unresolved</Badge>
                 </div>
-              )}
-              {recs && recs.total_recommendations > 0 && (
-                <div 
-                  className="cursor-pointer p-4 rounded-xl border border-border-primary bg-background-primary hover:bg-background-elevated transition-all flex flex-col gap-2 group shadow-sm hover:shadow-md"
-                  onClick={() => navigate('/resources')}
-                >
-                  <div className="flex items-center justify-between">
-                    <Badge variant="warning">Optimization</Badge>
-                    <Badge variant="pending" showIcon={false}>Pending</Badge>
-                  </div>
-                  <p className="text-sm text-text-primary font-medium leading-relaxed group-hover:text-amber-400 transition-colors">
-                    Found {recs.total_recommendations} new cost optimization opportunities
-                  </p>
+                <p className="text-xs text-text-primary font-medium leading-relaxed group-hover:text-danger transition-colors">
+                  Detected {metrics?.active_anomalies} unhandled anomalies
+                </p>
+              </div>
+            )}
+            {recs && recs.total_recommendations > 0 && (
+              <div 
+                className="cursor-pointer p-4 rounded-xl border border-border-primary bg-background-primary/40 hover:bg-background-elevated transition-all flex flex-col gap-2 group shadow-sm"
+                onClick={() => navigate('/resources')}
+              >
+                <div className="flex items-center justify-between">
+                  <Badge variant="warning">Optimization</Badge>
+                  <Badge variant="pending" showIcon={false}>Pending</Badge>
                 </div>
-              )}
-            </div>
+                <p className="text-xs text-text-primary font-medium leading-relaxed group-hover:text-warning transition-colors">
+                  Found {recs.total_recommendations} new cost optimization opportunities
+                </p>
+              </div>
+            )}
           </div>
         </Card>
 
         {/* Top Services */}
-        <Card className="p-6 transition-all duration-300 hover:shadow-lg lg:col-span-3">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold tracking-wider text-text-secondary uppercase">Top Services</h3>
+        <Card className="p-5 lg:col-span-3">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-bold tracking-wider text-text-muted uppercase">Top Services</h3>
           </div>
-          <div className="h-[300px] w-full flex items-center justify-center min-h-[300px]">
-            <ResponsiveContainer width="100%" height={300} minWidth={0}>
+          <div className="h-[280px] w-full flex items-center justify-center min-h-[280px]">
+            <ResponsiveContainer width="100%" height={280} minWidth={0}>
               <PieChart>
                 <Pie
                   data={(metrics?.top_services || []).slice(0, 5)}
                   cx="50%"
                   cy="50%"
-                  innerRadius={60}
+                  innerRadius={70}
                   outerRadius={100}
-                  paddingAngle={5}
+                  paddingAngle={4}
                   dataKey="amount"
                   nameKey="service"
                   stroke="none"
@@ -299,8 +319,9 @@ export default function Dashboard() {
                   ))}
                 </Pie>
                 <RechartsTooltip 
-                  contentStyle={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-primary)', borderRadius: '8px' }}
-                  formatter={(value: any) => formatCurrency(value as number)}
+                  contentStyle={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-primary)', borderRadius: '12px', boxShadow: 'var(--shadow-premium)' }}
+                  itemStyle={{ color: 'var(--text-primary)', fontSize: '11px', fontWeight: '500' }}
+                  formatter={(value: any) => [formatCurrency(value as number)]}
                 />
                 <Legend layout="vertical" verticalAlign="middle" align="right" />
               </PieChart>

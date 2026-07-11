@@ -1,7 +1,7 @@
 import os
 import io
 import csv
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from sqlalchemy.orm import Session
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
@@ -12,6 +12,14 @@ from app.models.report import Report
 from app.models.cost_record import CostRecord
 from app.models.anomaly import Anomaly
 from app.models.recommendation import Recommendation
+from app.models.user import User
+from app.models.aws_account import AWSAccount
+from app.core.exceptions import CloudWiseException
+
+def _get_val(r, key, default=None):
+    if isinstance(r, dict):
+        return r.get(key, default)
+    return getattr(r, key, default)
 
 
 class ReportService:
@@ -87,16 +95,33 @@ class ReportService:
         self.db.commit()
 
     def _generate_csv(self, user_id: str, report_type: str, filepath: str):
-        # Generate CSV representation
-        records = (
-            self.db.query(CostRecord)
-            .filter(CostRecord.user_id == user_id)
-            .order_by(CostRecord.date.desc())
-            .limit(1000)
-            .all()
-        )
+        user = self.db.query(User).filter(User.id == user_id).first()
+        is_demo = user.is_demo_mode if user else False
+
+        if is_demo:
+            records = (
+                self.db.query(CostRecord)
+                .filter(CostRecord.user_id == user_id)
+                .order_by(CostRecord.date.desc())
+                .limit(1000)
+                .all()
+            )
+        else:
+            if not user or not user.is_aws_connected:
+                raise CloudWiseException("AWS account not connected. Cannot generate report.", code="AWS_ERROR")
+            aws_account = self.db.query(AWSAccount).filter(AWSAccount.org_id == user.org_id, AWSAccount.is_active.is_(True)).first()
+            if not aws_account:
+                raise CloudWiseException("AWS account not connected. Cannot generate report.", code="AWS_ERROR")
+            
+            from app.services.aws_cost_explorer import cost_explorer_service
+            today = date.today()
+            start_date = today - timedelta(days=90)
+            records = cost_explorer_service.get_live_costs(aws_account, start_date, today)
+
         with open(filepath, mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
+            if is_demo:
+                writer.writerow(["[DEMO MODE - Showing sample cloud data for evaluation]"])
             writer.writerow(
                 [
                     "Date",
@@ -110,43 +135,65 @@ class ReportService:
             for r in records:
                 writer.writerow(
                     [
-                        r.date,
-                        r.service,
-                        r.region,
-                        r.amount,
-                        r.usage_quantity,
-                        r.granularity,
+                        _get_val(r, "date"),
+                        _get_val(r, "service"),
+                        _get_val(r, "region"),
+                        _get_val(r, "amount"),
+                        _get_val(r, "usage_quantity"),
+                        _get_val(r, "granularity"),
                     ]
                 )
 
     def _generate_pdf(self, user_id: str, report_type: str, filepath: str):
-        # Fetch data
-        costs = (
-            self.db.query(CostRecord)
-            .filter(CostRecord.user_id == user_id)
-            .order_by(CostRecord.date.desc())
-            .all()
-        )
-        anomalies = (
-            self.db.query(Anomaly)
-            .join(CostRecord, Anomaly.cost_record_id == CostRecord.id)
-            .filter(CostRecord.user_id == user_id)
-            .all()
-        )
-        recommendations = (
-            self.db.query(Recommendation)
-            .filter(Recommendation.user_id == user_id)
-            .all()
-        )
+        user = self.db.query(User).filter(User.id == user_id).first()
+        is_demo = user.is_demo_mode if user else False
 
-        from app.services.budget_service import BudgetService
+        if is_demo:
+            costs = (
+                self.db.query(CostRecord)
+                .filter(CostRecord.user_id == user_id)
+                .order_by(CostRecord.date.desc())
+                .all()
+            )
+            anomalies = (
+                self.db.query(Anomaly)
+                .join(CostRecord, Anomaly.cost_record_id == CostRecord.id)
+                .filter(CostRecord.user_id == user_id)
+                .all()
+            )
+            recommendations = (
+                self.db.query(Recommendation)
+                .filter(Recommendation.user_id == user_id)
+                .all()
+            )
+            from app.services.budget_service import BudgetService
+            budgets = BudgetService(self.db).get_budgets(user_id)
+        else:
+            if not user or not user.is_aws_connected:
+                raise CloudWiseException("AWS account not connected. Cannot generate report.", code="AWS_ERROR")
+            aws_account = self.db.query(AWSAccount).filter(AWSAccount.org_id == user.org_id, AWSAccount.is_active.is_(True)).first()
+            if not aws_account:
+                raise CloudWiseException("AWS account not connected. Cannot generate report.", code="AWS_ERROR")
+            
+            from app.services.aws_cost_explorer import cost_explorer_service
+            from app.ai.anomaly_detector import AnomalyDetector
+            from app.services.budget_service import BudgetService
 
-        budgets = BudgetService(self.db).get_budgets(user_id)
+            today = date.today()
+            start_date = today - timedelta(days=90)
+            costs = cost_explorer_service.get_live_costs(aws_account, start_date, today)
+            anomalies = AnomalyDetector(self.db).get_anomalies(user_id)
+            
+            # Fetch rightsizing recommendations synchronously
+            raw_recs = cost_explorer_service.fetch_live_rightsizing_recommendations(aws_account)
+            recommendations = [Recommendation(user_id=user_id, **r) for r in raw_recs]
+            
+            budgets = BudgetService(self.db).get_budgets(user_id)
 
-        total_spend = sum(c.amount for c in costs[:100])
-        unresolved_anomalies = sum(1 for a in anomalies if not a.is_resolved)
+        total_spend = sum(_get_val(c, "amount") for c in costs[:100])
+        unresolved_anomalies = sum(1 for a in anomalies if not _get_val(a, "is_resolved"))
         savings_opportunities = sum(
-            r.monthly_savings for r in recommendations if r.status == "pending"
+            _get_val(r, "monthly_savings") for r in recommendations if _get_val(r, "status") == "pending"
         )
 
         # Build PDF
@@ -195,6 +242,21 @@ class ReportService:
                 normal_style,
             )
         )
+        if is_demo:
+            alert_style = ParagraphStyle(
+                "DemoAlert",
+                parent=styles["Normal"],
+                fontName="Helvetica-Bold",
+                fontSize=11,
+                textColor=colors.HexColor("#ef4444"),
+                spaceAfter=15,
+            )
+            story.append(
+                Paragraph(
+                    "<b>[DEMO MODE - SAMPLE ONLY - Showing sample cloud data for evaluation]</b>",
+                    alert_style,
+                )
+            )
         story.append(Spacer(1, 15))
 
         if report_type == "cost_summary" or report_type == "executive_summary":
@@ -225,9 +287,11 @@ class ReportService:
 
             # Service breakdown
             story.append(Paragraph("Service Spending Breakdown", h2_style))
-            service_spend = {}
+            service_spend: dict[str, float] = {}
             for c in costs:
-                service_spend[c.service] = service_spend.get(c.service, 0) + c.amount
+                svc = _get_val(c, "service")
+                amt = _get_val(c, "amount")
+                service_spend[svc] = service_spend.get(svc, 0) + amt
 
             breakdown_data = [["Service", "Amount ($)"]]
             for svc, amt in sorted(
@@ -254,7 +318,7 @@ class ReportService:
             log_headers = [["Date", "Service", "Region", "Amount ($)"]]
             for r in costs[:25]:
                 log_headers.append(
-                    [str(r.date), r.service, r.region, f"${r.amount:,.2f}"]
+                    [str(_get_val(r, "date")), _get_val(r, "service"), _get_val(r, "region"), f"${_get_val(r, 'amount'):,.2f}"]
                 )
             t_logs = Table(log_headers, colWidths=[100, 150, 100, 150])
             t_logs.setStyle(
@@ -279,11 +343,11 @@ class ReportService:
                 for a in anomalies[:10]:
                     anom_headers.append(
                         [
-                            str(a.date),
-                            a.service,
-                            a.severity.upper(),
-                            f"${a.impact_amount:,.2f}",
-                            Paragraph(a.root_cause or "Analyzing", normal_style),
+                            str(_get_val(a, "date")),
+                            _get_val(a, "service"),
+                            _get_val(a, "severity").upper(),
+                            f"${_get_val(a, 'impact_amount'):,.2f}",
+                            Paragraph(_get_val(a, "root_cause") or "Analyzing", normal_style),
                         ]
                     )
                 t_anom = Table(anom_headers, colWidths=[70, 90, 60, 90, 190])
@@ -316,9 +380,9 @@ class ReportService:
                 for r in recommendations[:10]:
                     rec_headers.append(
                         [
-                            r.service,
-                            Paragraph(r.recommendation, normal_style),
-                            f"${r.monthly_savings:,.2f}",
+                            _get_val(r, "service"),
+                            Paragraph(_get_val(r, "recommendation"), normal_style),
+                            f"${_get_val(r, 'monthly_savings'):,.2f}",
                         ]
                     )
                 t_rec = Table(rec_headers, colWidths=[100, 300, 100])
@@ -382,12 +446,37 @@ class ReportService:
 
     def _generate_excel(self, user_id: str, report_type: str, filepath: str):
         """Generate Excel (xlsx) document representation using CSV tab format or openpyxl."""
+        user = self.db.query(User).filter(User.id == user_id).first()
+        is_demo = user.is_demo_mode if user else False
+
+        if is_demo:
+            records = (
+                self.db.query(CostRecord)
+                .filter(CostRecord.user_id == user_id)
+                .order_by(CostRecord.date.desc())
+                .limit(1000)
+                .all()
+            )
+        else:
+            if not user or not user.is_aws_connected:
+                raise CloudWiseException("AWS account not connected. Cannot generate report.", code="AWS_ERROR")
+            aws_account = self.db.query(AWSAccount).filter(AWSAccount.org_id == user.org_id, AWSAccount.is_active.is_(True)).first()
+            if not aws_account:
+                raise CloudWiseException("AWS account not connected. Cannot generate report.", code="AWS_ERROR")
+            
+            from app.services.aws_cost_explorer import cost_explorer_service
+            today = date.today()
+            start_date = today - timedelta(days=90)
+            records = cost_explorer_service.get_live_costs(aws_account, start_date, today)
+
         try:
             import openpyxl
 
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "CloudWise Report"
+            if is_demo:
+                ws.append(["[DEMO MODE - Showing sample cloud data for evaluation]"])
             ws.append(
                 [
                     "Date",
@@ -398,22 +487,15 @@ class ReportService:
                     "Granularity",
                 ]
             )
-            records = (
-                self.db.query(CostRecord)
-                .filter(CostRecord.user_id == user_id)
-                .order_by(CostRecord.date.desc())
-                .limit(1000)
-                .all()
-            )
             for r in records:
                 ws.append(
                     [
-                        str(r.date),
-                        r.service,
-                        r.region,
-                        r.amount,
-                        r.usage_quantity,
-                        r.granularity,
+                        str(_get_val(r, "date")),
+                        _get_val(r, "service"),
+                        _get_val(r, "region"),
+                        _get_val(r, "amount"),
+                        _get_val(r, "usage_quantity"),
+                        _get_val(r, "granularity"),
                     ]
                 )
             wb.save(filepath)

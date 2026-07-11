@@ -36,7 +36,7 @@ class FinOpsAssistant:
         self.cost_service = CostService(db)
         self.gemini_available = (
             bool(settings.GEMINI_API_KEY)
-            and "mock" not in settings.GEMINI_API_KEY.lower()
+            and "mock" not in str(settings.GEMINI_API_KEY).lower()
         )
 
     async def chat(self, message: str, user_id: Optional[str] = None) -> dict:
@@ -218,8 +218,10 @@ class FinOpsAssistant:
             "- Budget setup and alerts"
         )
 
-    def _get_cost_context(self, user_id: str) -> str:
+    def _get_cost_context(self, user_id: Optional[str]) -> str:
         """Build a response with current cost data context."""
+        if not user_id:
+            return "Please log in to view your cost context."
         try:
             metrics = self.cost_service.get_dashboard_metrics(user_id)
             return (

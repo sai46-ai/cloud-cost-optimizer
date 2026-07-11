@@ -11,8 +11,12 @@ interface User {
   id: string;
   email: string;
   full_name: string;
-  role: string;
+  role: 'ADMIN' | 'REVIEWER' | 'USER';
+  account_status: string;
+  last_login?: string;
   org_id?: string;
+  is_demo_mode?: boolean;
+  is_aws_connected?: boolean;
 }
 
 interface AppState {

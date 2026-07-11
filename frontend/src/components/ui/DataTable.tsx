@@ -57,22 +57,22 @@ export function DataTable<TData, TValue>({
         </div>
       )}
 
-      <div className="rounded-xl border border-[var(--border-secondary)] bg-[var(--bg-card)] overflow-hidden">
+      <div className="rounded-2xl border border-border-primary bg-background-secondary overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-[var(--bg-tertiary)] border-b border-[var(--border-secondary)]">
+          <table className="w-full text-xs text-left">
+            <thead className="bg-background-elevated border-b border-border-primary">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {
                     return (
                       <th
                         key={header.id}
-                        className={`px-4 py-3 font-medium text-[var(--text-secondary)] transition-colors ${
-                          header.column.getCanSort() ? 'cursor-pointer select-none hover:text-[var(--text-primary)]' : ''
+                        className={`px-5 py-3.5 font-bold text-[10px] uppercase tracking-wider text-text-muted transition-colors ${
+                          header.column.getCanSort() ? 'cursor-pointer select-none hover:text-text-primary' : ''
                         }`}
                         onClick={header.column.getToggleSortingHandler()}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           {header.isPlaceholder
                             ? null
                             : flexRender(
@@ -80,7 +80,7 @@ export function DataTable<TData, TValue>({
                                 header.getContext()
                               )}
                           {header.column.getCanSort() && (
-                            <ArrowUpDown size={12} className="text-[var(--text-muted)] opacity-50 hover:opacity-100" />
+                            <ArrowUpDown size={11} className="text-text-muted opacity-60 hover:opacity-100" />
                           )}
                         </div>
                       </th>
@@ -89,15 +89,15 @@ export function DataTable<TData, TValue>({
                 </tr>
               ))}
             </thead>
-            <tbody className="divide-y divide-[var(--border-secondary)]">
+            <tbody className="divide-y divide-border-primary/55 bg-background-secondary/40">
               {table.getRowModel().rows?.length ? (
                 table.getRowModel().rows.map((row) => (
                   <tr
                     key={row.id}
-                    className="hover:bg-[var(--bg-tertiary)] transition-colors group"
+                    className="hover:bg-background-elevated/75 transition-colors group"
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-4 py-3 text-[var(--text-primary)] align-middle">
+                      <td key={cell.id} className="px-5 py-3.5 text-text-primary font-medium align-middle">
                         {flexRender(
                           cell.column.columnDef.cell,
                           cell.getContext()
@@ -110,7 +110,7 @@ export function DataTable<TData, TValue>({
                 <tr>
                   <td
                     colSpan={columns.length}
-                    className="h-24 text-center text-[var(--text-muted)]"
+                    className="h-24 text-center text-text-muted font-medium"
                   >
                     No results found.
                   </td>
@@ -123,7 +123,7 @@ export function DataTable<TData, TValue>({
 
       {/* Pagination */}
       <div className="flex items-center justify-between px-2 py-4">
-        <div className="text-xs text-[var(--text-secondary)]">
+        <div className="text-xs text-text-secondary font-medium">
           Showing {table.getRowModel().rows.length} of {table.getFilteredRowModel().rows.length} row(s)
         </div>
         <div className="flex items-center space-x-2">

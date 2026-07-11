@@ -192,42 +192,55 @@ export default function Header() {
   };
 
   return (
-    <header className="h-16 border-b border-border-primary bg-background-elevated/80 backdrop-blur-md sticky top-0 z-30 px-8 flex items-center justify-between">
+    <header className="h-16 border-b border-border-primary bg-background-secondary/80 backdrop-blur-md sticky top-0 z-30 px-8 flex items-center justify-between">
       <div className="flex items-center gap-4">
         <button 
-          className="md:hidden btn-icon" 
+          className="md:hidden w-8 h-8 rounded-lg border border-border-primary flex items-center justify-center hover:bg-background-elevated text-text-secondary hover:text-text-primary transition-all cursor-pointer" 
           onClick={toggleSidebar}
           aria-label="Toggle Sidebar"
         >
-          <Menu size={20} />
+          <Menu size={18} />
         </button>
-        <div className="flex flex-col items-start">
+        <div className="flex flex-col items-start select-none">
           {getBreadcrumbs()}
-          <h2 className="text-lg font-bold leading-tight mt-0.5">{title}</h2>
+          <div className="flex items-center gap-2 mt-0.5">
+            <h2 className="text-base font-bold leading-tight tracking-tight text-text-primary">{title}</h2>
+            {user?.is_demo_mode && (
+              <span 
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/25 shadow-[0_0_8px_rgba(245,158,11,0.08)] select-none"
+                title="Showing sample cloud data for evaluation."
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                Demo Mode
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
       <div className="flex items-center gap-3">
         <div 
-          className="hidden md:flex items-center gap-2 bg-background-primary border border-border-primary rounded-md px-3 py-2 min-w-[240px] cursor-pointer hover:border-border-subtle focus-within:border-accent-primary focus-within:ring-2 ring-accent-primary/20 transition-all" 
+          className="hidden md:flex items-center gap-2.5 bg-background-primary border border-border-primary rounded-lg px-3 py-1.5 min-w-[250px] cursor-pointer hover:border-accent-primary/30 focus-within:border-accent-primary focus-within:ring-2 ring-accent-primary/10 transition-all duration-200" 
           onClick={() => setIsCommandPaletteOpen(true)}
         >
-          <Search size={18} className="text-text-muted" />
-          <input type="text" placeholder="Search pages, actions..." readOnly className="cursor-pointer bg-transparent border-none outline-none text-sm text-text-primary w-full" />
-          <kbd className="ml-2 text-xs bg-background-elevated px-1.5 py-0.5 rounded border border-border-primary text-text-muted">⌘K</kbd>
+          <Search size={15} className="text-text-muted" />
+          <input type="text" placeholder="Search pages, actions..." readOnly className="cursor-pointer bg-transparent border-none outline-none text-xs text-text-primary w-full placeholder:text-text-muted/70" />
+          <kbd className="ml-2 text-[10px] bg-background-elevated px-1.5 py-0.5 rounded border border-border-primary text-text-muted font-mono font-semibold shadow-sm select-none">⌘K</kbd>
         </div>
 
         {/* Notifications */}
         <div className="relative" ref={notifRef}>
           <button 
-            className="w-9 h-9 rounded-md border border-border-primary bg-background-elevated flex items-center justify-center text-text-secondary hover:bg-background-primary hover:text-text-primary transition-colors" 
+            className="w-9 h-9 rounded-lg border border-border-primary bg-background-elevated flex items-center justify-center text-text-secondary hover:bg-background-primary hover:text-text-primary transition-all cursor-pointer shadow-sm" 
             aria-label="Notifications"
+            aria-expanded={showNotifications}
+            aria-haspopup="true"
             onClick={() => { setShowNotifications(!showNotifications); setShowUserMenu(false); }}
           >
             <div className="relative">
-              <Bell size={20} />
+              <Bell size={18} />
               {notifications.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border border-[var(--bg-card)] animate-pulse"></span>
+                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full border border-background-elevated animate-pulse"></span>
               )}
             </div>
           </button>
@@ -235,33 +248,33 @@ export default function Header() {
           {showNotifications && (
             <div className="dropdown-menu notification-panel">
               <div className="notification-panel-header">
-                <span>Alerts Center</span>
-                <span className="text-xs text-[var(--text-muted)] font-normal">{notifications.length} unresolved</span>
+                <span className="text-text-primary font-bold">Alerts Center</span>
+                <span className="text-[10px] text-accent-primary font-bold bg-accent-primary/10 px-2 py-0.5 rounded-full">{notifications.length} unresolved</span>
               </div>
               {notifications.length > 0 ? (
-                <div className="divide-y divide-[var(--border-secondary)] max-h-[300px] overflow-y-auto">
+                <div className="divide-y divide-border-primary/45 max-h-[300px] overflow-y-auto">
                   {notifications.map((n) => (
-                    <div key={n.id} className="p-3 hover:bg-[var(--bg-card-hover)] transition-colors text-left cursor-pointer" onClick={() => { setShowNotifications(false); navigate(n.type === 'anomaly' ? '/ai-insights' : '/budgets'); }}>
+                    <div key={n.id} className="p-3.5 hover:bg-background-secondary/60 transition-colors text-left cursor-pointer" onClick={() => { setShowNotifications(false); navigate(n.type === 'anomaly' ? '/ai-insights' : '/budgets'); }}>
                       <div className="flex justify-between items-start mb-1 gap-2">
-                        <span className="font-semibold text-xs text-[var(--text-primary)] flex items-center gap-1">
+                        <span className="font-semibold text-xs text-text-primary flex items-center gap-1.5">
                           {n.severity === 'critical' ? (
-                            <AlertCircle size={12} className="text-red-500 shrink-0" />
+                            <AlertCircle size={13} className="text-red-500 shrink-0" />
                           ) : (
-                            <AlertTriangle size={12} className="text-amber-500 shrink-0" />
+                            <AlertTriangle size={13} className="text-amber-500 shrink-0" />
                           )}
                           {n.title}
                         </span>
-                        <span className="text-[9px] text-[var(--text-muted)] whitespace-nowrap shrink-0">{n.time}</span>
+                        <span className="text-[9px] text-text-muted font-semibold whitespace-nowrap shrink-0">{n.time}</span>
                       </div>
-                      <p className="text-[11px] text-[var(--text-secondary)] leading-normal">{n.message}</p>
+                      <p className="text-[11px] text-text-secondary leading-normal">{n.message}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="notification-panel-empty">
-                  <BellOff size={24} className="mx-auto mb-2 opacity-40" />
-                  <p>No new notifications</p>
-                  <p className="text-xs mt-1 text-[var(--text-muted)]">Active anomalies and budget overruns appear here</p>
+                <div className="notification-panel-empty py-10">
+                  <BellOff size={22} className="mx-auto mb-2.5 opacity-30 text-text-muted" />
+                  <p className="text-xs text-text-primary font-semibold">All quiet right now</p>
+                  <p className="text-[10px] mt-1 text-text-muted leading-relaxed max-w-[200px] mx-auto">Active anomalies and budget overruns will appear here.</p>
                 </div>
               )}
             </div>
@@ -269,18 +282,18 @@ export default function Header() {
         </div>
 
         <button 
-          className="w-9 h-9 rounded-md border border-border-primary bg-background-elevated flex items-center justify-center text-text-secondary hover:bg-background-primary hover:text-text-primary transition-colors" 
+          className="w-9 h-9 rounded-lg border border-border-primary bg-background-elevated flex items-center justify-center text-text-secondary hover:bg-background-primary hover:text-text-primary transition-all cursor-pointer shadow-sm" 
           onClick={toggleTheme}
           aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
         >
-          {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
 
         {/* User Menu */}
         <div className="relative" ref={userMenuRef}>
           <button
             ref={avatarButtonRef}
-            className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-[#FAFAFA] font-medium cursor-pointer shadow-sm border-2 border-transparent hover:border-[var(--accent-primary)] transition-all focus:outline-none focus:ring-2 focus:ring-accent-primary"
+            className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-[#FAFAFA] font-bold text-xs cursor-pointer shadow-sm border-2 border-transparent hover:border-accent-primary transition-all focus:outline-none focus:ring-2 focus:ring-accent-primary focus:ring-offset-1 focus:ring-offset-background-secondary"
             onClick={() => { setShowUserMenu(!showUserMenu); setShowNotifications(false); }}
             onKeyDown={handleAvatarKeyDown}
             aria-label="User profile menu"
@@ -295,12 +308,12 @@ export default function Header() {
               <motion.div
                 role="menu"
                 aria-label="User dropdown menu"
-                initial={{ opacity: 0, scale: 0.95, y: -8 }}
+                initial={{ opacity: 0, scale: 0.96, y: -4 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                exit={{ opacity: 0, scale: 0.96, y: -2 }}
                 transition={{ duration: 0.15, ease: 'easeOut' }}
                 onKeyDown={handleDropdownKeyDown}
-                className="absolute right-0 mt-3 w-[290px] rounded-2xl border border-border-primary bg-background-elevated shadow-2xl p-2.5 z-50 origin-top-right select-none"
+                className="absolute right-0 mt-2 w-[270px] rounded-xl border border-border-primary bg-background-elevated shadow-xl p-2 z-50 origin-top-right select-none"
               >
                 {/* User info section */}
                 <div className="px-3 py-2.5 mb-1.5 flex items-center gap-3">

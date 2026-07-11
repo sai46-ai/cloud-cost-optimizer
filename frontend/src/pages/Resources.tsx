@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { recommendationService } from '../services/api';
 import { formatCurrency } from '../lib/utils';
 import { Check, X, Server, Database, HardDrive, Cpu, AlertTriangle } from 'lucide-react';
@@ -7,33 +7,48 @@ import PageTransition from '../components/layout/PageTransition';
 import { motion } from 'framer-motion';
 import { Skeleton, SkeletonTable } from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
+import useStore from '../store';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
+import AWSOnboardingState from '../components/ui/AWSOnboardingState';
+import AWSErrorState from '../components/ui/AWSErrorState';
 
 export default function Resources() {
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasAWSError, setHasAWSError] = useState(false);
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
   const [sortBy, setSortBy] = useState('savings-desc');
+  const { user } = useStore();
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
+    if (user && !user.is_demo_mode && !user.is_aws_connected) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setHasAWSError(false);
     try {
       const data = await recommendationService.getRecommendations();
       const list = Array.isArray(data) ? data : [];
       // Filter out non-pending recommendations
       setRecommendations(list.filter((r: any) => r.status === 'pending'));
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to load recommendations:", err);
       setRecommendations([]);
+      if (err.message && (err.message.includes("AWS_ERROR") || err.message.includes("AWS") || err.message.includes("credentials") || err.message.includes("502"))) {
+        setHasAWSError(true);
+      }
     } finally {
       setLoading(false);
     }
-  }
+  }, [user]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   const handleAction = async (id: string, action: 'implement' | 'dismiss') => {
     try {
@@ -81,6 +96,14 @@ export default function Resources() {
     hidden: { opacity: 0, y: 10 },
     show: { opacity: 1, y: 0 }
   };
+
+  if (user && !user.is_demo_mode && !user.is_aws_connected) {
+    return <AWSOnboardingState />;
+  }
+
+  if (hasAWSError) {
+    return <AWSErrorState onRetry={loadData} isLoading={loading} />;
+  }
 
   if (loading) {
     return (

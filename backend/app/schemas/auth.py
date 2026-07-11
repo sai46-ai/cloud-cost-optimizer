@@ -40,9 +40,13 @@ class UserResponse(BaseModel):
     full_name: str
     role: str
     is_active: bool
+    account_status: str
+    last_login: Optional[datetime] = None
     avatar_url: Optional[str] = None
     org_id: str
     created_at: datetime
+    is_demo_mode: bool
+    is_aws_connected: bool
 
     model_config = {"from_attributes": True}
 

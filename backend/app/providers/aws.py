@@ -30,11 +30,14 @@ class AWSCloudProvider(BaseCloudProvider):
     ) -> List[Dict[str, Any]]:
         """Fetch cost explorer data or fallback to stored database records."""
         from app.services.aws_cost_explorer import AWSCostExplorerService
-
         service = AWSCostExplorerService()
-        if service.client:
-            return service.get_cost_and_usage(start_date, end_date, granularity)
-        return []
+        try:
+            start_str = start_date.strftime("%Y-%m-%d")
+            end_str = end_date.strftime("%Y-%m-%d")
+            return service.fetch_aws_cost_and_usage(start_str, end_str, granularity)
+        except Exception as e:
+            logger.error(f"Failed to fetch costs: {e}")
+            return []
 
     async def get_inventory(self) -> List[Dict[str, Any]]:
         """Return resource inventory summary."""
