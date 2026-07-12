@@ -253,50 +253,7 @@ function CloudInfrastructureScene() {
   );
 }
 
-// ─── Gradient sky plane ───────────────────────────────────────────────────
-function SkyGradient({ theme }: { theme: 'dark' | 'light' }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const material = useMemo(() => {
-    const isDark = theme === 'dark';
-    return new THREE.ShaderMaterial({
-      uniforms: {
-        uColorTop: { value: new THREE.Color(isDark ? '#04060d' : '#dbeafe') },
-        uColorBottom: { value: new THREE.Color(isDark ? '#0b0f19' : '#f0f7ff') },
-      },
-      vertexShader: `
-        precision mediump float;
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        precision mediump float;
-        uniform vec3 uColorTop;
-        uniform vec3 uColorBottom;
-        varying vec2 vUv;
-        void main() {
-          gl_FragColor = vec4(mix(uColorBottom, uColorTop, vUv.y), 1.0);
-        }
-      `,
-      side: THREE.BackSide,
-      depthWrite: false,
-    });
-  }, [theme]);
 
-  useEffect(() => {
-    return () => {
-      material.dispose();
-    };
-  }, [material]);
-
-  return (
-    <mesh ref={meshRef} material={material} scale={[80, 80, 80]}>
-      <sphereGeometry args={[1, 32, 32]} />
-    </mesh>
-  );
-}
 
 import { isWebGLAvailable } from '../../lib/utils';
 

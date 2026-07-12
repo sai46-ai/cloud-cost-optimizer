@@ -14,13 +14,30 @@ export default function Settings() {
   const { theme, toggleTheme, user, setUser, addToast } = useStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState(tabParam || 'general');
+  const [activeTab, setActiveTab] = useState(() => {
+    if (tabParam === 'audit' && user?.role !== 'ADMIN') {
+      return 'general';
+    }
+    return tabParam || 'general';
+  });
 
   useEffect(() => {
     if (tabParam) {
-      setActiveTab(tabParam);
+      if (tabParam === 'audit' && user?.role !== 'ADMIN') {
+        setActiveTab('general');
+        setSearchParams({ tab: 'general' });
+      } else {
+        setActiveTab(tabParam);
+      }
     }
-  }, [tabParam]);
+  }, [tabParam, user?.role, setSearchParams]);
+
+  useEffect(() => {
+    if (activeTab === 'audit' && user && user.role !== 'ADMIN') {
+      setActiveTab('general');
+      setSearchParams({ tab: 'general' });
+    }
+  }, [activeTab, user, setSearchParams]);
 
   const [settings, setSettings] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -195,7 +212,7 @@ export default function Settings() {
     { id: 'aws', label: 'AWS Integration', icon: Key },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'notifications', label: 'Notifications', icon: Bell },
-    { id: 'audit', label: 'Audit Trail', icon: Activity },
+    ...(user?.role === 'ADMIN' ? [{ id: 'audit', label: 'Audit Trail', icon: Activity }] : []),
   ];
 
   return (
@@ -497,7 +514,7 @@ export default function Settings() {
             </Card>
           )}
 
-          {activeTab === 'audit' && (
+          {activeTab === 'audit' && user?.role === 'ADMIN' && (
             <Card className="animate-fade-in">
               <CardHeader className="border-b border-border-primary pb-4 mb-6">
                 <CardTitle className="flex items-center gap-2">
