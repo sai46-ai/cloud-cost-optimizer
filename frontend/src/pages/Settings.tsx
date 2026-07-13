@@ -18,9 +18,14 @@ export default function Settings() {
 
   useEffect(() => {
     if (tabParam) {
-      setActiveTab(tabParam);
+      if (tabParam === 'audit') {
+        setSearchParams({ tab: 'general' });
+        setActiveTab('general');
+      } else {
+        setActiveTab(tabParam);
+      }
     }
-  }, [tabParam]);
+  }, [tabParam, setSearchParams]);
 
   const [settings, setSettings] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);

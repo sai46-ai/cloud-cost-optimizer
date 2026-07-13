@@ -5,6 +5,8 @@ test.describe('Accessibility Audit', () => {
   test('Landing page should not have any automatically detectable accessibility issues', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    await page.locator('main').waitFor({ state: 'visible' });
+    await page.locator('h1').first().waitFor({ state: 'visible' });
     
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
     
@@ -17,6 +19,7 @@ test.describe('Accessibility Audit', () => {
   test('Login page should not have any automatically detectable accessibility issues', async ({ page }) => {
     await page.goto('/login');
     await page.waitForLoadState('networkidle');
+    await page.locator('h1').first().waitFor({ state: 'visible' });
     
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
     

@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings
 from pydantic import Field
 from typing import Optional
 from functools import lru_cache
+from pathlib import Path
 
 
 class Settings(BaseSettings):
@@ -68,7 +69,7 @@ class Settings(BaseSettings):
     REVIEWER_EMAILS: str = "reviewer1@example.com,reviewer2@example.com,qa@example.com,faculty@example.com"
 
     # Seeding development admin account (disabled in production or if set to False)
-    SEED_DEV_ADMIN: bool = True
+    SEED_DEV_ADMIN: bool = False
 
     @property
     def cors_origins_list(self) -> list[str]:
@@ -84,7 +85,7 @@ class Settings(BaseSettings):
 
 
     model_config = {
-        "env_file": ".env",
+        "env_file": str(Path(__file__).resolve().parent.parent.parent / ".env"),
         "env_file_encoding": "utf-8",
         "case_sensitive": True,
         "extra": "ignore",

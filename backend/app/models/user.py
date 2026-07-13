@@ -7,8 +7,6 @@ from app.models.base import TimestampMixin, generate_uuid
 
 
 class UserRole(str, enum.Enum):
-    ADMIN = "ADMIN"
-    REVIEWER = "REVIEWER"
     USER = "USER"
 
 
@@ -26,7 +24,7 @@ class User(Base, TimestampMixin):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(
         String(50), default="USER", server_default="USER"
-    )  # ADMIN, REVIEWER, USER
+    )  # USER
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     account_status: Mapped[str] = mapped_column(
         String(20), default="active", server_default="active"
@@ -56,13 +54,11 @@ class User(Base, TimestampMixin):
 
     @property
     def is_demo_mode(self) -> bool:
-        return self.role == "REVIEWER"
+        return True
 
     @property
     def is_aws_connected(self) -> bool:
-        if not self.organization:
-            return False
-        return any(acc.is_active for acc in self.organization.aws_accounts)
+        return True
 
     def __repr__(self) -> str:
         return f"<User {self.email}>"

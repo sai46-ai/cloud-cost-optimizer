@@ -61,7 +61,7 @@ export default function Reports() {
       loadReports();
       
       // Auto-trigger download
-      const downloadUrl = `${BACKEND_URL}/static/reports/${report.filename}`;
+      const downloadUrl = `/static/reports/${report.filename}`;
       window.open(downloadUrl, '_blank');
     } catch (err: any) {
       addToast(err.message || 'Failed to generate PDF report', 'error');
@@ -82,7 +82,7 @@ export default function Reports() {
       loadReports();
 
       // Auto-trigger download
-      const downloadUrl = `${BACKEND_URL}/static/reports/${report.filename}`;
+      const downloadUrl = `/static/reports/${report.filename}`;
       window.open(downloadUrl, '_blank');
     } catch (err: any) {
       addToast(err.message || 'Failed to generate CSV export', 'error');
@@ -221,7 +221,7 @@ export default function Reports() {
                       cell: ({ row }) => (
                         <div className="flex gap-2">
                           <a 
-                            href={`${BACKEND_URL}/static/reports/${row.original.filename}`} 
+                            href={`/static/reports/${row.original.filename}`} 
                             target="_blank" 
                             rel="noreferrer"
                             className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-border-primary bg-background-primary hover:bg-background-elevated h-8 px-3 py-1 text-xs text-text-primary hover:text-accent-primary"

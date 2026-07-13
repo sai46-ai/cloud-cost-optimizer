@@ -90,7 +90,7 @@ export default function CostAnalytics() {
         format: 'csv'
       });
       // Redirect to the static URL download
-      const downloadUrl = `${BACKEND_URL}/static/reports/${report.filename}`;
+      const downloadUrl = `/static/reports/${report.filename}`;
       window.open(downloadUrl, '_blank');
       addToast("CSV Export downloaded successfully", "success");
     } catch (err: any) {

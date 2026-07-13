@@ -57,13 +57,7 @@ class AuthService:
             org = Organization(name=organization_name, slug=slug)
             self.org_repo.create(org)
 
-        # Create user (first user of the organization is ADMIN)
-        is_first_in_org = self.db.query(User).filter(User.org_id == org.id).count() == 0
-        
-        if role and role in ["ADMIN", "REVIEWER", "USER"]:
-            assigned_role = role
-        else:
-            assigned_role = "ADMIN" if is_first_in_org else "USER"
+        assigned_role = "USER"
 
         user = User(
             email=email,
