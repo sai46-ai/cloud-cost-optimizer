@@ -22,6 +22,7 @@ export default function AIInsights() {
     }
   ]);
   const [input, setInput] = useState('');
+  const [provider, setProvider] = useState<'gemini' | 'openai'>('gemini');
   const [isTyping, setIsTyping] = useState(false);
   const [loading, setLoading] = useState(true);
   const [hasAWSError, setHasAWSError] = useState(false);
@@ -68,7 +69,7 @@ export default function AIInsights() {
     setIsTyping(true);
 
     try {
-      const response = await aiService.chat(text);
+      const response = await aiService.chat(text, provider);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
         content: response.response,
@@ -214,15 +215,27 @@ export default function AIInsights() {
 
       {/* AI Chat Interface */}
       <Card className="w-full md:w-2/3 flex flex-col h-[500px] md:h-full p-0 overflow-hidden relative">
-        <div className="p-4 border-b border-border-primary bg-background-card flex items-center gap-3 z-10">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[#FAFAFA] shadow-lg shadow-indigo-500/20">
-            <Sparkles size={20} />
+        <div className="p-4 border-b border-border-primary bg-background-card flex items-center justify-between z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[#FAFAFA] shadow-lg shadow-indigo-500/20">
+              <Sparkles size={20} />
+            </div>
+            <div>
+              <h3 className="font-semibold text-text-primary text-sm sm:text-base">CloudWise FinOps AI</h3>
+              <p className="text-xs text-text-secondary flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-success animate-pulse"></span> Online
+              </p>
+            </div>
           </div>
           <div>
-            <h3 className="font-semibold text-text-primary">CloudWise FinOps AI</h3>
-            <p className="text-xs text-text-secondary flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-success"></span> Online
-            </p>
+            <select
+              value={provider}
+              onChange={(e) => setProvider(e.target.value as 'gemini' | 'openai')}
+              className="flex h-9 rounded-lg border border-border-primary bg-background-primary px-2.5 py-1 text-xs font-semibold text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-primary/30 focus:border-accent-primary cursor-pointer hover:bg-background-elevated transition-all"
+            >
+              <option value="gemini">Google Gemini</option>
+              <option value="openai">ChatGPT (GPT-4o)</option>
+            </select>
           </div>
         </div>
 

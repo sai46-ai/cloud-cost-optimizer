@@ -36,7 +36,7 @@ class AWSAccountResponse(BaseModel):
     org_id: str
     account_id: str
     account_name: str
-    role_arn: str
+    role_arn: str | None = None
     external_id: str | None = None
     region: str
     is_active: bool

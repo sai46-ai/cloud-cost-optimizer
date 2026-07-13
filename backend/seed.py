@@ -55,23 +55,32 @@ def seed_user_data(user, db):
     # 3. Create or reuse AWS Account for user's organization
     account = db.query(AWSAccount).filter_by(org_id=org.id).first()
     if not account:
-        # Check if this account_id already exists globally (UNIQUE constraint)
-        existing_account = db.query(AWSAccount).filter_by(account_id="123456789012").first()
-        if existing_account:
-            account = existing_account
-        else:
-            account = AWSAccount(
-                org_id=org.id,
-                account_id="123456789012",
-                account_name="Production Root",
-                role_arn="arn:aws:iam::123456789012:role/CloudWiseReadOnlyRole",
-                external_id=f"ext-{user.id[:8]}",
-                region="us-east-1",
-                is_active=True
-            )
-            db.add(account)
-            db.commit()
-            db.refresh(account)
+        # Generate a unique 12-digit account ID for this user's organization
+        # We use digits from the user ID to ensure uniqueness, fallback to random
+        import random
+        digits = "".join(c for c in user.id if c.isdigit())
+        if len(digits) < 12:
+            digits += "".join(str(random.randint(0, 9)) for _ in range(12 - len(digits)))
+        account_id = digits[:12]
+        
+        # Check if this account_id exists (highly unlikely due to uuid generation)
+        existing_account = db.query(AWSAccount).filter_by(account_id=account_id).first()
+        while existing_account:
+            account_id = "".join(str(random.randint(0, 9)) for _ in range(12))
+            existing_account = db.query(AWSAccount).filter_by(account_id=account_id).first()
+            
+        account = AWSAccount(
+            org_id=org.id,
+            account_id=account_id,
+            account_name="Production Root",
+            role_arn=f"arn:aws:iam::{account_id}:role/CloudWiseReadOnlyRole",
+            external_id=f"ext-{user.id[:8]}",
+            region="us-east-1",
+            is_active=True
+        )
+        db.add(account)
+        db.commit()
+        db.refresh(account)
 
     # Check if user already has cost records
     existing_records = db.query(CostRecord).filter_by(user_id=user.id).count()

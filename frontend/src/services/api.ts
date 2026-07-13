@@ -32,16 +32,37 @@ api.interceptors.response.use(
     window.dispatchEvent(new CustomEvent('api-online'));
     return response;
   },
-  (error) => {
+  async (error) => {
     if (!error.response) {
       // Network error - backend is offline or unreachable
       window.dispatchEvent(new CustomEvent('api-offline'));
     } else {
       window.dispatchEvent(new CustomEvent('api-online'));
+      
+      if (error.response.status === 401 || error.response.status === 403) {
+        // Clear token and user state to prevent infinite 401 loop
+        localStorage.removeItem('access_token');
+        try {
+          const storeModule = await import('../store');
+          storeModule.default.getState().setAuthenticated(false);
+          storeModule.default.getState().setUser(null);
+        } catch (e) {
+          console.error("Failed to reset auth state:", e);
+        }
+        
+        // Redirect to login if on a protected route
+        const publicPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/verify', '/'];
+        const isPublicPath = publicPaths.includes(window.location.pathname);
+        if (!isPublicPath) {
+          window.location.href = '/login';
+        }
+      }
     }
     // Extract error details returned by FastAPI
     const message = error.response?.data?.detail || error.message || 'API request failed';
-    return Promise.reject(new Error(message));
+    const errObj = new Error(message) as any;
+    errObj.status = error.response?.status;
+    return Promise.reject(errObj);
   }
 );
 
@@ -164,35 +185,37 @@ export const aiService = {
     const response = await api.post('/forecasts/generate');
     return response.data;
   },
-  chat: async (message: string) => {
+  chat: async (message: string, provider: string = 'gemini') => {
     const msgLower = message.toLowerCase().trim();
     
-    // 1. Direct client-side Google AI call if key is set in environment
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (apiKey && apiKey !== 'your_gemini_api_key_here' && apiKey.trim() !== '') {
-      try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-        const systemPrompt = (
-          "You are CloudWise AI, an expert FinOps assistant specializing in AWS cost optimization and cloud economics. " +
-          "Provide concise, actionable advice about AWS billing, cost optimization, rightsizing, and cloud architecture. " +
-          "Use clear markdown formatting. Be specific with AWS service names and pricing details."
-        );
-        const result = await model.generateContent(`${systemPrompt}\n\nUser Question: ${message}`);
-        const response = await result.response;
-        return {
-          response: response.text().trim(),
-          source: 'gemini_ai',
-          suggestions: ['How can I reduce EC2 costs?', 'Explain S3 lifecycle rules', 'How are budgets monitored?']
-        };
-      } catch (err: any) {
-        console.error('Direct Google Gemini API call failed:', err);
+    // 1. Direct client-side Google AI call if key is set in environment (only for gemini)
+    if (provider === 'gemini') {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (apiKey && apiKey !== 'your_gemini_api_key_here' && apiKey.trim() !== '') {
+        try {
+          const genAI = new GoogleGenerativeAI(apiKey);
+          const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+          const systemPrompt = (
+            "You are CloudWise AI, an expert FinOps assistant specializing in AWS cost optimization and cloud economics. " +
+            "Provide concise, actionable advice about AWS billing, cost optimization, rightsizing, and cloud architecture. " +
+            "Use clear markdown formatting. Be specific with AWS service names and pricing details."
+          );
+          const result = await model.generateContent(`${systemPrompt}\n\nUser Question: ${message}`);
+          const response = await result.response;
+          return {
+            response: response.text().trim(),
+            source: 'gemini_ai',
+            suggestions: ['How can I reduce EC2 costs?', 'Explain S3 lifecycle rules', 'How are budgets monitored?']
+          };
+        } catch (err: any) {
+          console.error('Direct Google Gemini API call failed:', err);
+        }
       }
     }
 
     // 2. Fall back to backend AI chat endpoint
     try {
-      const response = await api.post('/assistant/chat', { message });
+      const response = await api.post('/assistant/chat', { message, provider });
       return response.data;
     } catch (err: any) {
       console.warn('Backend assistant chat call failed. Falling back to local rule-based response.', err);
@@ -230,6 +253,13 @@ export const setupService = {
   health: async () => {
     const response = await api.get('/health');
     return response.data;
+  },
+  logFrontend: async (level: string, message: string, component?: string, stack?: string) => {
+    try {
+      await api.post('/logs/frontend', { level, message, component, stack });
+    } catch (e) {
+      console.error('Failed to report log to backend:', e);
+    }
   }
 };
 

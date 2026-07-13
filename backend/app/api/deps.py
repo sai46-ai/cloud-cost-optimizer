@@ -48,16 +48,20 @@ def require_role(*roles: str):
     """Factory for role-based access control dependency. Bypassed for demo mode."""
 
     async def role_checker(user: User = Depends(get_current_user)):
+        if user.is_demo_mode:
+            return user
+        if user.role not in roles:
+            raise forbidden("Insufficient permissions")
         return user
 
     return role_checker
 
 
 # Role shortcuts
-require_admin = require_role("USER")
-require_reviewer = require_role("USER")
-require_user = require_role("USER")
-require_any = require_role("USER")
+require_admin = require_role("ADMIN")
+require_reviewer = require_role("REVIEWER", "ADMIN")
+require_user = require_role("USER", "ADMIN", "REVIEWER")
+require_any = require_role("USER", "ADMIN", "REVIEWER")
 
 # Legacy compatibility shortcuts mapped to any authenticated role
 require_manager = require_any

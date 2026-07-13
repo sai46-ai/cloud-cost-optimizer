@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_MODEL: str = "gemini-3.5-flash"
 
+    # OpenAI / ChatGPT AI
+    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_MODEL: str = "gpt-4o-mini"
+
     # S3
     S3_BUCKET_REPORTS: str = "cloudwise-reports"
 
@@ -69,7 +73,7 @@ class Settings(BaseSettings):
     REVIEWER_EMAILS: str = "reviewer1@example.com,reviewer2@example.com,qa@example.com,faculty@example.com"
 
     # Seeding development admin account (disabled in production or if set to False)
-    SEED_DEV_ADMIN: bool = False
+    SEED_DEV_ADMIN: bool = True
 
     @property
     def cors_origins_list(self) -> list[str]:

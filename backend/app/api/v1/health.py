@@ -46,3 +46,34 @@ def health_check(response: Response, db: Session = Depends(get_db)):
         "database": db_status,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+
+from pydantic import BaseModel
+from typing import Optional
+import logging
+
+logger = logging.getLogger("cloudwise")
+
+
+class FrontendLogRequest(BaseModel):
+    level: str
+    message: str
+    component: Optional[str] = None
+    stack: Optional[str] = None
+
+
+@router.post("/logs/frontend", status_code=status.HTTP_200_OK)
+def log_frontend_event(log: FrontendLogRequest):
+    """Receive and log frontend exceptions/console events to central logs."""
+    extra = {
+        "component": log.component or "unknown",
+        "stack": log.stack or "none"
+    }
+    log_msg = f"[FRONTEND] {log.message}"
+    if log.level.lower() == "error":
+        logger.error(log_msg, extra=extra)
+    elif log.level.lower() == "warning" or log.level.lower() == "warn":
+        logger.warning(log_msg, extra=extra)
+    else:
+        logger.info(log_msg, extra=extra)
+    return {"status": "logged"}

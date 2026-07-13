@@ -5,6 +5,8 @@ Handles user registration, login, token management, and password operations.
 
 import logging
 from sqlalchemy.orm import Session
+from typing import Optional
+
 
 
 
@@ -38,7 +40,7 @@ class AuthService:
         self.org_repo = BaseRepository(Organization, db)
 
     def register(
-        self, email: str, password: str, full_name: str, organization_name: str, role: str = None
+        self, email: str, password: str, full_name: str, organization_name: str, role: Optional[str] = None
     ) -> dict:
         """Register a new user and organization."""
         # Check for existing user

@@ -1,8 +1,10 @@
 """AI Assistant API routes."""
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from app.database import get_db
 from app.services.ai_service import AIService
@@ -16,6 +18,7 @@ router = APIRouter()
 
 class ChatRequest(BaseModel):
     message: str
+    provider: Optional[str] = "gemini"
 
 
 class ChatResponse(BaseModel):
@@ -32,4 +35,18 @@ async def chat(
 ):
     """Send a message to the AI FinOps assistant."""
     assistant = AIService(db)
-    return await assistant.chat(data.message, user.id)
+    return await assistant.chat(data.message, provider=data.provider or "gemini", user_id=user.id)
+
+
+@router.post("/chat/stream", dependencies=[Depends(rate_limiter)])
+async def chat_stream(
+    data: ChatRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Stream response from the AI assistant."""
+    assistant = AIService(db)
+    return StreamingResponse(
+        assistant.chat_stream(data.message, provider=data.provider or "gemini", user_id=user.id),
+        media_type="text/event-stream"
+    )

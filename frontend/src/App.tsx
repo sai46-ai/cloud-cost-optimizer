@@ -94,13 +94,14 @@ function App() {
           setAuthenticated(true);
           setOffline(false);
         } catch (e: any) {
-          console.warn("Auth init failed, but keeping session if offline:", e.message);
-          if (!localStorage.getItem('access_token')) {
-             setAuthenticated(false);
-             setUser(null);
+          console.warn("Auth init failed, checking status:", e.message, e.status);
+          if (e.status === 401 || e.status === 403) {
+            localStorage.removeItem('access_token');
+            setAuthenticated(false);
+            setUser(null);
           } else {
-             setOffline(true);
-             setAuthenticated(true);
+            setOffline(true);
+            setAuthenticated(true);
           }
         }
       }

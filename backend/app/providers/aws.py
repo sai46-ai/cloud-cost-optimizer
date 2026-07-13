@@ -22,8 +22,16 @@ class AWSCloudProvider(BaseCloudProvider):
         return "aws"
 
     def is_configured(self) -> bool:
-        """Check whether AWS Access Key and Secret Key or session tokens exist."""
-        return bool(settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY)
+        """Check whether AWS Access Key and Secret Key or default credentials exist."""
+        if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+            return True
+        import boto3
+        try:
+            session = boto3.Session()
+            credentials = session.get_credentials()
+            return credentials is not None
+        except Exception:
+            return False
 
     async def get_cost_data(
         self, start_date: date, end_date: date, granularity: str = "DAILY"

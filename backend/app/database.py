@@ -20,34 +20,53 @@ engine_kwargs: Dict[str, Any] = {
 is_sqlite_db = settings.is_sqlite
 fallback_sqlite_url = "sqlite:///./cloudwise.db"
 
+import time
+
 if is_sqlite_db:
     connect_args = {"check_same_thread": False}
     engine = create_engine(
         settings.DATABASE_URL, connect_args=connect_args, **engine_kwargs
     )
 else:
-    engine_kwargs["pool_size"] = 5
-    engine_kwargs["max_overflow"] = 10
-    try:
-        # Create a temp engine and try to connect
-        temp_engine = create_engine(settings.DATABASE_URL, **engine_kwargs)
-        with temp_engine.connect() as conn:
-            pass
-        engine = temp_engine
-        logger.info("Connected to PostgreSQL successfully.")
-    except (OperationalError, Exception) as e:
-        logger.warning(
-            "PostgreSQL connection failed. Falling back to SQLite. Error: %s", e
-        )
-        is_sqlite_db = True
-        connect_args = {"check_same_thread": False}
-        engine_kwargs = {
-            "pool_pre_ping": True,
-            "echo": settings.DEBUG,
-        }
-        engine = create_engine(
-            fallback_sqlite_url, connect_args=connect_args, **engine_kwargs
-        )
+    # Production-grade PostgreSQL pool configurations
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
+    engine_kwargs["pool_recycle"] = 1800
+    engine_kwargs["pool_timeout"] = 30
+    
+    # Auto-reconnection / retry logic on application startup
+    postgres_connected = False
+    last_error = None
+    for attempt in range(5):
+        try:
+            logger.info("Connecting to PostgreSQL database (Attempt %d/5)...", attempt + 1)
+            temp_engine = create_engine(settings.DATABASE_URL, **engine_kwargs)
+            with temp_engine.connect() as conn:
+                pass
+            engine = temp_engine
+            postgres_connected = True
+            logger.info("Connected to PostgreSQL successfully.")
+            break
+        except (OperationalError, Exception) as e:
+            last_error = e
+            logger.warning("PostgreSQL connection attempt %d failed: %s", attempt + 1, e)
+            time.sleep(2 ** attempt)
+
+    if not postgres_connected:
+        if settings.ENVIRONMENT.lower() == "production":
+            logger.critical("FATAL: Could not connect to production PostgreSQL/RDS database. Error: %s", last_error)
+            raise RuntimeError(f"Failed to connect to production database: {last_error}")
+        else:
+            logger.warning("PostgreSQL connection failed. Falling back to SQLite for local development. Error: %s", last_error)
+            is_sqlite_db = True
+            connect_args = {"check_same_thread": False}
+            engine_kwargs = {
+                "pool_pre_ping": True,
+                "echo": settings.DEBUG,
+            }
+            engine = create_engine(
+                fallback_sqlite_url, connect_args=connect_args, **engine_kwargs
+            )
 
 # Enable WAL mode for SQLite for better concurrent performance
 if is_sqlite_db:
