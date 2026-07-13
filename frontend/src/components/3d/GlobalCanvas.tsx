@@ -1,15 +1,19 @@
 import React, { useRef, useMemo, useEffect } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { Environment, Sparkles } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
+import { Environment, Sparkles, View, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 import useStore from '../../store';
+import { isWebGLAvailable } from '../../lib/utils';
 
 // ─── Subtle idle camera drift ──────────────────────────────────────────────
 function CameraDrift() {
   const basePos = useRef(new THREE.Vector3(0, 0, 12));
+  const timeRef = useRef(0);
 
-  useFrame(({ clock, camera }) => {
-    const t = clock.elapsedTime;
+  useFrame((state, delta) => {
+    timeRef.current += delta;
+    const t = timeRef.current;
+    const { camera } = state;
     camera.position.x = basePos.current.x + Math.sin(t * 0.08) * 0.4;
     camera.position.y = basePos.current.y + Math.cos(t * 0.05) * 0.25;
     camera.position.z = basePos.current.z + Math.sin(t * 0.06) * 0.15;
@@ -30,10 +34,12 @@ interface DataNodeProps {
 function DataNode({ position, radius, color, speed, phaseOffset }: DataNodeProps) {
   const meshRef = useRef<THREE.Mesh>(null);
   const origin = useRef(new THREE.Vector3(...position));
+  const timeRef = useRef(0);
 
-  useFrame(({ clock }) => {
+  useFrame((state, delta) => {
     if (!meshRef.current) return;
-    const t = clock.elapsedTime * speed + phaseOffset;
+    timeRef.current += delta;
+    const t = timeRef.current * speed + phaseOffset;
     meshRef.current.position.x = origin.current.x + Math.sin(t * 0.7) * 0.35;
     meshRef.current.position.y = origin.current.y + Math.cos(t * 0.5) * 0.28;
     meshRef.current.position.z = origin.current.z + Math.sin(t * 0.4) * 0.2;
@@ -96,10 +102,12 @@ function ConnectionLine({
 // ─── Large translucent cloud-core sphere ───────────────────────────────────
 function CloudCore() {
   const meshRef = useRef<THREE.Mesh>(null);
+  const timeRef = useRef(0);
 
-  useFrame(({ clock }) => {
+  useFrame((state, delta) => {
     if (!meshRef.current) return;
-    const t = clock.elapsedTime;
+    timeRef.current += delta;
+    const t = timeRef.current;
     meshRef.current.rotation.y = t * 0.04;
     meshRef.current.rotation.x = Math.sin(t * 0.03) * 0.08;
   });
@@ -123,10 +131,12 @@ function CloudCore() {
 // ─── Wireframe shell around the core ──────────────────────────────────────
 function CloudCoreWireframe() {
   const meshRef = useRef<THREE.Mesh>(null);
+  const timeRef = useRef(0);
 
-  useFrame(({ clock }) => {
+  useFrame((state, delta) => {
     if (!meshRef.current) return;
-    const t = clock.elapsedTime;
+    timeRef.current += delta;
+    const t = timeRef.current;
     meshRef.current.rotation.y = -t * 0.02;
     meshRef.current.rotation.z = t * 0.015;
   });
@@ -170,9 +180,12 @@ function OrbitRing({ radiusX, radiusZ, tilt, color, speed }: {
   }, [geometry]);
 
   const groupRef = useRef<THREE.Group>(null);
-  useFrame(({ clock }) => {
+  const timeRef = useRef(0);
+
+  useFrame((state, delta) => {
     if (!groupRef.current) return;
-    groupRef.current.rotation.y = clock.elapsedTime * speed;
+    timeRef.current += delta;
+    groupRef.current.rotation.y = timeRef.current * speed;
   });
 
   return (
@@ -253,12 +266,9 @@ function CloudInfrastructureScene() {
   );
 }
 
-
-
-import { isWebGLAvailable } from '../../lib/utils';
-
 // ─── Exported GlobalCanvas ─────────────────────────────────────────────────
 export function GlobalCanvas() {
+  const containerRef = useRef<HTMLDivElement>(null!);
   const { theme } = useStore();
   const hasWebGL = useMemo(() => isWebGLAvailable(), []);
 
@@ -282,6 +292,7 @@ export function GlobalCanvas() {
 
   return (
     <div
+      ref={containerRef}
       style={{
         position: 'fixed',
         inset: 0,
@@ -291,19 +302,8 @@ export function GlobalCanvas() {
         pointerEvents: 'none',
       }}
     >
-      <Canvas
-        camera={{ position: [0, 0, 12], fov: 50, near: 0.1, far: 200 }}
-        dpr={[1, 2]}
-        gl={{
-          antialias: true,
-          alpha: true,
-          powerPreference: 'high-performance',
-          outputColorSpace: THREE.SRGBColorSpace,
-        }}
-        style={{ background: 'transparent' }}
-      >
-        {/* Gradient background sky is removed to allow background video to show */}
-
+      <View track={containerRef}>
+        <PerspectiveCamera makeDefault position={[0, 0, 12]} fov={50} near={0.1} far={200} />
         {/* Ambient lighting — soft, neutral */}
         <ambientLight intensity={1.2} color="#f0f4ff" />
 
@@ -328,8 +328,7 @@ export function GlobalCanvas() {
         <React.Suspense fallback={null}>
           <CloudInfrastructureScene />
         </React.Suspense>
-      </Canvas>
+      </View>
     </div>
   );
 }
-

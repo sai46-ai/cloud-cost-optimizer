@@ -19,7 +19,7 @@ CloudWise AI is an enterprise-grade cloud cost optimization, rightsizing, and Fi
 - **Multi-Cloud Architecture**: Modular cloud provider interfaces (`app/providers/`) supporting AWS, Google Cloud Platform (GCP), and Microsoft Azure integrations.
 - **Granular Cost Analytics**: Multi-dimensional cost breakdown by cloud services, regions, accounts, and dates with stacked bar charts and comparison tables.
 - **ML Anomaly Detection**: Built-in machine learning module using Isolation Forest algorithms to detect cost spikes or drops, scoring severities (critical, high, medium, low) with automated root-cause analysis.
-- **Google Gemini FinOps Assistant**: Conversational AI assistant powered by Google Gemini API (`gemini-2.5-flash`) for explaining billing anomalies, rightsizing tips, and spending predictions.
+- **Google Gemini FinOps Assistant**: Conversational AI assistant powered by Google Gemini API (`gemini-3.5-flash`) for explaining billing anomalies, rightsizing tips, and spending predictions.
 - **Automated Resource Rightsizing**: Intelligent recommendation engine for EC2 compute sizing, RDS database optimization, S3 lifecycle storage management, Spot Instance opportunities, and Savings Plans.
 - **Multi-Threshold Budgeting**: Real-time budget monitoring supporting granular threshold notifications (50%, 80%, 90%, 100%) with status indicators.
 - **Multi-Format Report Exports**: On-demand generation and instant download of formatted executive PDF summaries, CSV financial records, and Excel (`xlsx`) reports.
@@ -78,7 +78,7 @@ graph TD
 | **Data Visualization** | Recharts 3.8, Three.js / React Three Fiber |
 | **Backend Core** | Python 3.11+, FastAPI 0.115, Pydantic v2, PyJWT, Passlib (bcrypt) |
 | **Database & Async** | SQLAlchemy 2.0 (ORM), Alembic (Migrations), Celery 5.4, Redis 7.0 |
-| **AI / Machine Learning** | Google Gemini API (`gemini-2.5-flash`), scikit-learn (Isolation Forest) |
+| **AI / Machine Learning** | Google Gemini API (`gemini-3.5-flash`), scikit-learn (Isolation Forest) |
 | **Document Engine** | ReportLab (PDF), openpyxl / csv (Excel & CSV exports), Jinja2 |
 | **DevOps & Security** | Docker, Docker Compose, Nginx, Security Headers, Rate Limiting |
 
@@ -173,7 +173,7 @@ CloudWise AI uses Google Gemini API for FinOps billing analysis. To configure:
 2. Set the environment variable in `.env`:
    ```bash
    GEMINI_API_KEY="AIzaSy..."
-   GEMINI_MODEL="gemini-2.5-flash"
+   GEMINI_MODEL="gemini-3.5-flash"
    ```
 
 ---

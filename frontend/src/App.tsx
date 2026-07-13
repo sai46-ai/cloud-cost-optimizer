@@ -1,5 +1,8 @@
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState, useRef, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Canvas } from '@react-three/fiber';
+import { View } from '@react-three/drei';
+import { isWebGLAvailable } from './lib/utils';
 import Layout from './components/layout/Layout';
 import AuthLayout from './components/layout/AuthLayout';
 import useStore from './store';
@@ -19,7 +22,6 @@ import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import VerifyEmail from './pages/VerifyEmail';
-import Unauthorized from './pages/Unauthorized';
 
 import Dashboard from './pages/Dashboard';
 import CostAnalytics from './pages/CostAnalytics';
@@ -30,12 +32,6 @@ import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import Landing from './pages/Landing';
-
-// Admin Pages
-import AdminDashboard from './pages/admin/AdminDashboard';
-import UserManagement from './pages/admin/UserManagement';
-import AdminAuditLogs from './pages/admin/AdminAuditLogs';
-import AdminSettings from './pages/admin/AdminSettings';
 
 // Protected Route Wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -48,21 +44,6 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return children;
 };
 
-// Protected Admin Route Wrapper
-const AdminRoute = ({ children }: { children: React.ReactNode }) => {
-  const isAuthenticated = useStore((state) => state.isAuthenticated);
-  const user = useStore((state) => state.user);
-  
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (user?.role !== 'ADMIN') {
-    return <Navigate to="/unauthorized" replace />;
-  }
-
-  return children;
-};
 
 // Global Offline Banner
 const OfflineBanner = () => {
@@ -77,6 +58,8 @@ const OfflineBanner = () => {
 };
 
 function App() {
+  const containerRef = useRef<HTMLDivElement>(null!);
+  const hasWebGL = useMemo(() => isWebGLAvailable(), []);
   const { theme, setAuthenticated, setUser, setOffline } = useStore();
   const [isInitializing, setIsInitializing] = useState(true);
 
@@ -202,55 +185,55 @@ function App() {
   }
 
   return (
-    <Router>
-      <OfflineBanner />
-      <Routes>
-        {/* Public Authentication Routes */}
-        <Route element={<AuthLayout />}>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/verify" element={<VerifyEmail />} />
-          <Route path="/unauthorized" element={<Unauthorized />} />
-        </Route>
+    <div ref={containerRef} className="relative min-h-screen">
+      <Router>
+        <OfflineBanner />
+        <Routes>
+          {/* Public Authentication Routes */}
+          <Route element={<AuthLayout />}>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/verify" element={<VerifyEmail />} />
+          </Route>
 
-        {/* Public Landing Route */}
-        <Route path="/" element={<Landing />} />
+          {/* Public Landing Route */}
+          <Route path="/" element={<Landing />} />
 
-        {/* Protected Dashboard Routes */}
-        <Route element={
-          <ProtectedRoute>
-            <Layout />
-          </ProtectedRoute>
-        }>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/analytics" element={<CostAnalytics />} />
-          <Route path="/resources" element={<Resources />} />
-          <Route path="/ai-insights" element={<AIInsights />} />
-          <Route path="/budgets" element={<Budgets />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/profile" element={<Profile />} />
-        </Route>
-        
-        {/* Protected Admin Routes */}
-        <Route element={
-          <AdminRoute>
-            <Layout />
-          </AdminRoute>
-        }>
-          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-          <Route path="/admin/dashboard" element={<AdminDashboard />} />
-          <Route path="/admin/users" element={<UserManagement />} />
-          <Route path="/admin/audit-logs" element={<AdminAuditLogs />} />
-          <Route path="/admin/settings" element={<AdminSettings />} />
-        </Route>
-        
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Router>
+          {/* Protected Dashboard Routes */}
+          <Route element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/analytics" element={<CostAnalytics />} />
+            <Route path="/resources" element={<Resources />} />
+            <Route path="/ai-insights" element={<AIInsights />} />
+            <Route path="/budgets" element={<Budgets />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/profile" element={<Profile />} />
+          </Route>
+          
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Router>
+
+      {hasWebGL && (
+        <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 0 }}>
+          <Canvas 
+            eventSource={containerRef} 
+            gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
+            style={{ pointerEvents: 'none' }}
+          >
+            <View.Port />
+          </Canvas>
+        </div>
+      )}
+    </div>
   );
 }
 

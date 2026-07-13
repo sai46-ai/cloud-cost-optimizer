@@ -14,7 +14,7 @@ This document details all mandatory and optional environment variables, cloud cr
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | **Mandatory** | JWT access token expiration duration | Integer (minutes) | `60` |
 | `DATABASE_URL` | **Mandatory** | Database connection string (`backend/app/database.py`) | PostgreSQL URL or local SQLite URL | `sqlite:///./cloudwise.db` or `postgresql://user:pass@host:5432/dbname` |
 | `GEMINI_API_KEY` | **Optional** | Google Gemini API key for FinOps Assistant chatbot (`backend/app/ai/assistant.py`) | Google AI Studio API Key string | `AIzaSyA1b2C3d4E5f6G7H8I9J0` |
-| `GEMINI_MODEL` | **Optional** | Gemini Model identifier | Model name string | `gemini-2.5-flash` |
+| `GEMINI_MODEL` | **Optional** | Gemini Model identifier | Model name string | `gemini-3.5-flash` |
 | `AWS_ACCESS_KEY_ID` | **Optional** | AWS Access Key ID for live Cost Explorer & CloudWatch API syncing | 20-character uppercase alphanumeric string | `AKIAIOSFODNN7EXAMPLE` |
 | `AWS_SECRET_ACCESS_KEY` | **Optional** | AWS Secret Access Key | 40-character secret key string | `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` |
 | `AWS_SESSION_TOKEN` | **Optional** | Required for AWS Academy / Learner Lab temporary session tokens | Session token string | `IQoJb3JpZ2luX2Vj...` |
@@ -42,7 +42,7 @@ To enable the interactive FinOps assistant:
 3. Update `.env`:
    ```bash
    GEMINI_API_KEY="AIzaSy..."
-   GEMINI_MODEL="gemini-2.5-flash"
+   GEMINI_MODEL="gemini-3.5-flash"
    ```
 
 ### 3. Configure AWS Integration Credentials (Optional)

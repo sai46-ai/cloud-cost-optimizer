@@ -61,8 +61,8 @@ export default function Resources() {
     }
   };
 
-  const getResourceIcon = (type: string) => {
-    switch (type.toLowerCase()) {
+  const getResourceIcon = (type: string = '') => {
+    switch ((type || '').toLowerCase()) {
       case 'ec2 instance': return <Server size={20} className="text-orange-500" />;
       case 'rds instance': return <Database size={20} className="text-accent-cyan" />;
       case 's3 bucket': return <HardDrive size={20} className="text-accent-primary" />;
@@ -72,15 +72,15 @@ export default function Resources() {
     }
   };
 
-  const totalSavings = recommendations.reduce((acc, curr) => acc + curr.monthly_savings, 0);
+  const totalSavings = recommendations.reduce((acc, curr) => acc + (curr.monthly_savings || 0), 0);
 
   const filteredRecs = recommendations
-    .filter(rec => priorityFilter === 'all' || rec.priority.toLowerCase() === priorityFilter.toLowerCase())
-    .filter(rec => typeFilter === 'all' || rec.resource_type.toLowerCase() === typeFilter.toLowerCase())
+    .filter(rec => priorityFilter === 'all' || (rec.priority || '').toLowerCase() === priorityFilter.toLowerCase())
+    .filter(rec => typeFilter === 'all' || (rec.resource_type || '').toLowerCase() === typeFilter.toLowerCase())
     .sort((a, b) => {
-      if (sortBy === 'savings-desc') return b.monthly_savings - a.monthly_savings;
-      if (sortBy === 'savings-asc') return a.monthly_savings - b.monthly_savings;
-      if (sortBy === 'cost-desc') return b.current_cost - a.current_cost;
+      if (sortBy === 'savings-desc') return (b.monthly_savings || 0) - (a.monthly_savings || 0);
+      if (sortBy === 'savings-asc') return (a.monthly_savings || 0) - (b.monthly_savings || 0);
+      if (sortBy === 'cost-desc') return (b.current_cost || 0) - (a.current_cost || 0);
       return 0;
     });
 

@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.ai.assistant import FinOpsAssistant
+from app.services.ai_service import AIService
 from app.api.deps import get_current_user
 from app.models.user import User
 
@@ -31,5 +31,5 @@ async def chat(
     user: User = Depends(get_current_user),
 ):
     """Send a message to the AI FinOps assistant."""
-    assistant = FinOpsAssistant(db)
+    assistant = AIService(db)
     return await assistant.chat(data.message, user.id)

@@ -33,9 +33,9 @@ def is_retryable_aws_error(exception):
 class AWSCostExplorerService:
     def __init__(self):
         self.config = Config(
-            retries={"max_attempts": 5, "mode": "adaptive"},
-            connect_timeout=10,
-            read_timeout=30,
+            retries={"max_attempts": 2, "mode": "standard"},
+            connect_timeout=3,
+            read_timeout=10,
         )
 
     def _get_client(self, aws_account=None):
@@ -47,7 +47,9 @@ class AWSCostExplorerService:
                     "sts",
                     aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
                     aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+                    aws_session_token=os.getenv("AWS_SESSION_TOKEN"),
                     region_name=os.getenv("AWS_REGION", "us-east-1"),
+                    config=self.config,
                 )
                 assumed_role_object = sts_client.assume_role(
                     RoleArn=aws_account.role_arn,

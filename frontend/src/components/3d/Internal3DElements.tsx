@@ -1,16 +1,19 @@
 import React, { useRef, useMemo } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
+import { View, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 import { isWebGLAvailable } from '../../lib/utils';
 
 // --- Dashboard Data Cube ---
 function DataCubeMesh({ color }: { color: string }) {
   const meshRef = useRef<THREE.Mesh>(null);
+  const timeRef = useRef(0);
   
-  useFrame(({ clock }) => {
+  useFrame((state, delta) => {
+    timeRef.current += delta;
     if (meshRef.current) {
-      meshRef.current.rotation.x = clock.getElapsedTime() * 0.5;
-      meshRef.current.rotation.y = clock.getElapsedTime() * 0.5;
+      meshRef.current.rotation.x = timeRef.current * 0.5;
+      meshRef.current.rotation.y = timeRef.current * 0.5;
     }
   });
 
@@ -30,15 +33,17 @@ function DataCubeMesh({ color }: { color: string }) {
 }
 
 export function DashboardDataCube() {
+  const containerRef = useRef<HTMLDivElement>(null!);
   const hasWebGL = React.useMemo(() => isWebGLAvailable(), []);
   if (!hasWebGL) return null;
 
   return (
-    <div className="hidden md:block w-16 h-16 absolute -top-4 -right-4 pointer-events-none opacity-50">
-      <Canvas camera={{ position: [0, 0, 5] }}>
+    <div ref={containerRef} className="hidden md:block w-16 h-16 absolute -top-4 -right-4 pointer-events-none opacity-50">
+      <View track={containerRef}>
+        <PerspectiveCamera makeDefault position={[0, 0, 5]} />
         <ambientLight intensity={0.5} />
         <DataCubeMesh color="#3b82f6" />
-      </Canvas>
+      </View>
     </div>
   );
 }
@@ -47,10 +52,12 @@ export function DashboardDataCube() {
 // --- Analytics Network Graph ---
 function NetworkGraphMesh() {
   const groupRef = useRef<THREE.Group>(null);
+  const timeRef = useRef(0);
   
-  useFrame(({ clock }) => {
+  useFrame((state, delta) => {
+    timeRef.current += delta;
     if (groupRef.current) {
-      groupRef.current.rotation.y = clock.getElapsedTime() * 0.2;
+      groupRef.current.rotation.y = timeRef.current * 0.2;
     }
   });
 
@@ -93,15 +100,17 @@ function NetworkGraphMesh() {
 }
 
 export function AnalyticsNetworkGraph() {
+  const containerRef = useRef<HTMLDivElement>(null!);
   const hasWebGL = React.useMemo(() => isWebGLAvailable(), []);
   if (!hasWebGL) return null;
 
   return (
-    <div className="hidden md:block absolute right-0 top-0 w-32 h-32 opacity-40 pointer-events-none">
-      <Canvas camera={{ position: [0, 0, 4] }}>
+    <div ref={containerRef} className="hidden md:block absolute right-0 top-0 w-32 h-32 opacity-40 pointer-events-none">
+      <View track={containerRef}>
+        <PerspectiveCamera makeDefault position={[0, 0, 4]} />
         <ambientLight intensity={1} />
         <NetworkGraphMesh />
-      </Canvas>
+      </View>
     </div>
   );
 }
@@ -109,11 +118,13 @@ export function AnalyticsNetworkGraph() {
 // --- Reports Rotating Cube ---
 function AnalyticsCubeMesh() {
   const meshRef = useRef<THREE.Mesh>(null);
+  const timeRef = useRef(0);
   
-  useFrame(({ clock }) => {
+  useFrame((state, delta) => {
+    timeRef.current += delta;
     if (meshRef.current) {
-      meshRef.current.rotation.y = clock.getElapsedTime() * 0.3;
-      meshRef.current.rotation.z = Math.sin(clock.getElapsedTime() * 0.5) * 0.2;
+      meshRef.current.rotation.y = timeRef.current * 0.3;
+      meshRef.current.rotation.z = Math.sin(timeRef.current * 0.5) * 0.2;
     }
   });
 
@@ -131,15 +142,17 @@ function AnalyticsCubeMesh() {
 }
 
 export function ReportsAnalyticsCube() {
+  const containerRef = useRef<HTMLDivElement>(null!);
   const hasWebGL = React.useMemo(() => isWebGLAvailable(), []);
   if (!hasWebGL) return null;
 
   return (
-    <div className="hidden md:block w-24 h-24 absolute right-8 top-8 opacity-30 pointer-events-none">
-      <Canvas camera={{ position: [0, 0, 5] }}>
+    <div ref={containerRef} className="hidden md:block w-24 h-24 absolute right-8 top-8 opacity-30 pointer-events-none">
+      <View track={containerRef}>
+        <PerspectiveCamera makeDefault position={[0, 0, 5]} />
         <ambientLight intensity={1} />
         <AnalyticsCubeMesh />
-      </Canvas>
+      </View>
     </div>
   );
 }
@@ -147,11 +160,13 @@ export function ReportsAnalyticsCube() {
 // --- Settings Holographic Sphere ---
 function HoloSphereMesh() {
   const meshRef = useRef<THREE.Mesh>(null);
+  const timeRef = useRef(0);
   
-  useFrame(({ clock }) => {
+  useFrame((state, delta) => {
+    timeRef.current += delta;
     if (meshRef.current) {
-      meshRef.current.rotation.x = clock.getElapsedTime() * 0.1;
-      meshRef.current.rotation.y = clock.getElapsedTime() * 0.2;
+      meshRef.current.rotation.x = timeRef.current * 0.1;
+      meshRef.current.rotation.y = timeRef.current * 0.2;
     }
   });
 
@@ -169,16 +184,17 @@ function HoloSphereMesh() {
 }
 
 export function SettingsHoloSphere() {
+  const containerRef = useRef<HTMLDivElement>(null!);
   const hasWebGL = React.useMemo(() => isWebGLAvailable(), []);
   if (!hasWebGL) return null;
 
   return (
-    <div className="hidden md:block w-20 h-20 absolute -right-2 top-0 opacity-40 pointer-events-none">
-      <Canvas camera={{ position: [0, 0, 4] }}>
+    <div ref={containerRef} className="hidden md:block w-20 h-20 absolute -right-2 top-0 opacity-40 pointer-events-none">
+      <View track={containerRef}>
+        <PerspectiveCamera makeDefault position={[0, 0, 4]} />
         <ambientLight intensity={1} />
         <HoloSphereMesh />
-      </Canvas>
+      </View>
     </div>
   );
 }
-

@@ -116,8 +116,7 @@ def update_aws_account(
 
     account.account_id = data.account_id
     account.role_arn = data.role_arn
-    if data.account_name:
-        account.account_name = data.account_name
+    account.account_name = data.account_name or f"AWS Account {data.account_id}"
     if data.region:
         account.region = data.region
 

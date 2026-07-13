@@ -1,12 +1,12 @@
 """
-AI FinOps Assistant
-Conversational chatbot for explaining AWS bills, anomalies, and recommendations.
-Uses Google Gemini API when available, falls back to rule-based responses.
+AI Service Layer
+Centralized service for managing all AI interactions and provider integrations (Google Gemini API).
 """
 
 import logging
 from typing import Optional
 from sqlalchemy.orm import Session
+import httpx
 
 from app.core.config import get_settings
 from app.services.cost_service import CostService
@@ -15,7 +15,6 @@ from app.models.cost_record import CostRecord
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
 
 # Pre-built FinOps knowledge base for rule-based fallback
 FINOPS_KB = {
@@ -28,34 +27,29 @@ FINOPS_KB = {
 }
 
 
-class FinOpsAssistant:
-    """AI-powered FinOps chatbot using Google Gemini."""
+class AIService:
+    """Centralized AI Service using Google Gemini API."""
 
     def __init__(self, db: Session):
         self.db = db
         self.cost_service = CostService(db)
-        self.gemini_available = (
-            bool(settings.GEMINI_API_KEY)
-            and "mock" not in str(settings.GEMINI_API_KEY).lower()
-        )
 
     async def chat(self, message: str, user_id: Optional[str] = None) -> dict:
-        """Process a user message and return a response."""
+        """Process a user message and return a response using Google Gemini."""
         message_lower = message.lower().strip()
 
-        # Try Gemini first if API key configured
-        if self.gemini_available:
-            try:
-                response = await self._gemini_response(message)
-                return {
-                    "response": response,
-                    "source": "gemini_ai",
-                    "suggestions": self._get_suggestions(message_lower),
-                }
-            except Exception as e:
-                logger.warning(f"Gemini fallback to rule-based KB: {e}")
+        # Always try Gemini first (API key is validated on application startup)
+        try:
+            response = await self._gemini_response(message)
+            return {
+                "response": response,
+                "source": "gemini_ai",
+                "suggestions": self._get_suggestions(message_lower),
+            }
+        except Exception as e:
+            logger.warning(f"Gemini API call failed, falling back to rule-based KB: {e}")
 
-        # Rule-based fallback
+        # Rule-based fallback if Gemini API call fails at runtime
         response = self._rule_based_response(message_lower, user_id)
         return {
             "response": response,
@@ -244,8 +238,6 @@ class FinOpsAssistant:
 
     async def _gemini_response(self, message: str) -> str:
         """Generate response using Google Gemini API."""
-        import httpx
-
         system_prompt = (
             "You are CloudWise AI, an expert FinOps assistant specializing in AWS cost optimization and cloud economics. "
             "Provide concise, actionable advice about AWS billing, cost optimization, rightsizing, and cloud architecture. "

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Save, Key, User, Shield, Bell, Info, Activity } from 'lucide-react';
+import { Save, Key, User, Shield, Bell, Info } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import useStore from '../store';
-import { settingsService, authService, auditService } from '../services/api';
+import { settingsService, authService } from '../services/api';
 import PageTransition from '../components/layout/PageTransition';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
@@ -14,37 +14,16 @@ export default function Settings() {
   const { theme, toggleTheme, user, setUser, addToast } = useStore();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState(() => {
-    if (tabParam === 'audit' && user?.role !== 'ADMIN') {
-      return 'general';
-    }
-    return tabParam || 'general';
-  });
+  const [activeTab, setActiveTab] = useState(() => tabParam || 'general');
 
   useEffect(() => {
     if (tabParam) {
-      if (tabParam === 'audit' && user?.role !== 'ADMIN') {
-        setActiveTab('general');
-        setSearchParams({ tab: 'general' });
-      } else {
-        setActiveTab(tabParam);
-      }
+      setActiveTab(tabParam);
     }
-  }, [tabParam, user?.role, setSearchParams]);
-
-  useEffect(() => {
-    if (activeTab === 'audit' && user && user.role !== 'ADMIN') {
-      setActiveTab('general');
-      setSearchParams({ tab: 'general' });
-    }
-  }, [activeTab, user, setSearchParams]);
+  }, [tabParam]);
 
   const [settings, setSettings] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
-
-  // Audit Logs states
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
-  const [loadingAudit, setLoadingAudit] = useState(false);
 
   // General tab states
   const [fullName, setFullName] = useState('');
@@ -74,22 +53,6 @@ export default function Settings() {
     fetchSettings();
   }, []);
 
-  useEffect(() => {
-    if (activeTab === 'audit') {
-      const fetchAudits = async () => {
-        setLoadingAudit(true);
-        try {
-          const data = await auditService.getAuditLogs(1, 20);
-          setAuditLogs(data.items || []);
-        } catch (err) {
-          console.error('Failed to fetch audit logs:', err);
-        } finally {
-          setLoadingAudit(false);
-        }
-      };
-      fetchAudits();
-    }
-  }, [activeTab]);
 
   useEffect(() => {
     if (user) {
@@ -137,6 +100,8 @@ export default function Settings() {
         account_id: awsAccountId,
         role_arn: awsRoleArn
       });
+      const profile = await authService.getProfile();
+      setUser(profile);
       addToast('AWS Account connected successfully', 'success');
     } catch (err: any) {
       addToast(err.message || 'Failed to connect AWS Account', 'error');
@@ -212,7 +177,6 @@ export default function Settings() {
     { id: 'aws', label: 'AWS Integration', icon: Key },
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'notifications', label: 'Notifications', icon: Bell },
-    ...(user?.role === 'ADMIN' ? [{ id: 'audit', label: 'Audit Trail', icon: Activity }] : []),
   ];
 
   return (
@@ -510,71 +474,6 @@ export default function Settings() {
                     {isSaving ? "Saving..." : "Save Notification Preferences"}
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {activeTab === 'audit' && user?.role === 'ADMIN' && (
-            <Card className="animate-fade-in">
-              <CardHeader className="border-b border-border-primary pb-4 mb-6">
-                <CardTitle className="flex items-center gap-2">
-                  <Activity size={18} /> Governance & Audit Trail
-                </CardTitle>
-              </CardHeader>
-              
-              <CardContent>
-                {loadingAudit ? (
-                  <SkeletonTable rows={4} cols={5} />
-                ) : (
-                  <div className="rounded-xl border border-border-primary bg-background-secondary overflow-hidden shadow-sm">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead className="bg-background-elevated border-b border-border-primary text-[10px] font-bold uppercase tracking-wider text-text-muted">
-                        <tr>
-                          <th className="py-3 px-4">Timestamp</th>
-                          <th className="py-3 px-4">Action</th>
-                          <th className="py-3 px-4">Resource</th>
-                          <th className="py-3 px-4">Description</th>
-                          <th className="py-3 px-4">IP Address</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border-primary/50 bg-background-secondary/20">
-                        {auditLogs.map((log: any) => (
-                          <tr key={log.id} className="text-text-primary hover:bg-background-elevated/60 transition-colors">
-                            <td className="py-3.5 px-4 text-xs font-mono text-text-secondary">
-                              {new Date(log.created_at).toLocaleString()}
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                log.action === 'login' ? 'bg-success/15 text-success border border-success/20' :
-                                log.action === 'register' ? 'bg-accent-cyan/15 text-accent-cyan border border-accent-cyan/20' :
-                                log.action === 'create' ? 'bg-accent-primary/15 text-accent-primary border border-accent-primary/20' :
-                                log.action === 'delete' ? 'bg-danger/15 text-danger border border-danger/20' : 'bg-text-muted/15 text-text-muted border border-border-primary'
-                              }`}>
-                                {log.action}
-                              </span>
-                            </td>
-                            <td className="py-3.5 px-4 text-xs font-mono text-text-secondary">
-                              {log.resource_type || '-'}
-                            </td>
-                            <td className="py-3.5 px-4 font-medium">
-                              {log.description || '-'}
-                            </td>
-                            <td className="py-3.5 px-4 text-xs font-mono text-text-secondary">
-                              {log.ip_address || '-'}
-                            </td>
-                          </tr>
-                        ))}
-                        {auditLogs.length === 0 && (
-                          <tr>
-                            <td colSpan={5} className="py-8 text-center text-text-muted font-medium text-xs">
-                              No logs recorded yet.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
               </CardContent>
             </Card>
           )}

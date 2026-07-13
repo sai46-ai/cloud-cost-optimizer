@@ -38,7 +38,7 @@ class AuthService:
         self.org_repo = BaseRepository(Organization, db)
 
     def register(
-        self, email: str, password: str, full_name: str, organization_name: str
+        self, email: str, password: str, full_name: str, organization_name: str, role: str = None
     ) -> dict:
         """Register a new user and organization."""
         # Check for existing user
@@ -52,19 +52,25 @@ class AuthService:
             self.db.query(Organization).filter(Organization.slug == slug).first()
         )
         if existing_org:
-            raise DuplicateEntityError("Organization", "name", organization_name)
+            org = existing_org
+        else:
+            org = Organization(name=organization_name, slug=slug)
+            self.org_repo.create(org)
 
-        org = Organization(name=organization_name, slug=slug)
-        self.org_repo.create(org)
+        # Create user (first user of the organization is ADMIN)
+        is_first_in_org = self.db.query(User).filter(User.org_id == org.id).count() == 0
+        
+        if role and role in ["ADMIN", "REVIEWER", "USER"]:
+            assigned_role = role
+        else:
+            assigned_role = "ADMIN" if is_first_in_org else "USER"
 
-        # Create user (first user is ADMIN)
-        is_first = self.user_repo.count() == 0
         user = User(
             email=email,
             full_name=full_name,
             hashed_password=hash_password(password),
             org_id=org.id,
-            role="ADMIN" if is_first else "USER",
+            role=assigned_role,
         )
         self.user_repo.create(user)
 

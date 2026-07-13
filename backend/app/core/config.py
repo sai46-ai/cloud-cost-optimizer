@@ -48,7 +48,7 @@ class Settings(BaseSettings):
 
     # Gemini AI
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash"
 
     # S3
     S3_BUCKET_REPORTS: str = "cloudwise-reports"
@@ -82,9 +82,6 @@ class Settings(BaseSettings):
     def is_sqlite(self) -> bool:
         return self.DATABASE_URL.startswith("sqlite")
 
-    # OpenAI Configuration
-    OPENAI_API_KEY: Optional[str] = None
-    OPENAI_MODEL: Optional[str] = "gpt-4"
 
     model_config = {
         "env_file": ".env",

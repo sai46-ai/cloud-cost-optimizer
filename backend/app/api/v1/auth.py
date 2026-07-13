@@ -35,6 +35,7 @@ def register(request: Request, data: RegisterRequest, db: Session = Depends(get_
         password=data.password,
         full_name=data.full_name,
         organization_name=data.organization_name,
+        role=data.role,
     )
     user_id = result.get("user", {}).get("id")
     AuditService.log_action(

@@ -115,7 +115,7 @@ export default function Register() {
             />
             <p className="text-[13px] text-text-muted mt-1.5 ml-1">Must be at least 8 characters.</p>
           </div>
-          
+
           <div className="pt-2">
             <AuthButton type="submit" isLoading={isLoading}>
               Create Account <UserPlus size={18} className="ml-1" />

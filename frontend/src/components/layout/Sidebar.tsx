@@ -7,8 +7,7 @@ import {
   Wallet, 
   FileText, 
   Settings,
-  PanelLeftClose,
-  Shield
+  PanelLeftClose
 } from 'lucide-react';
 import useStore from '../../store';
 
@@ -28,10 +27,7 @@ const bottomNavItems = [
 export default function Sidebar() {
   const { sidebarOpen, sidebarCollapsed, toggleSidebarCollapse, user } = useStore();
 
-  const visibleNavItems = [...navItems];
-  if (user?.role === 'ADMIN') {
-    visibleNavItems.push({ path: '/admin/dashboard', label: 'Admin Panel', icon: Shield });
-  }
+  const visibleNavItems = navItems;
 
   const initials = user?.full_name 
     ? user.full_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() 

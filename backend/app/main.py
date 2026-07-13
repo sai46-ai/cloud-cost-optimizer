@@ -26,7 +26,6 @@ from app.api.v1 import (
     settings as settings_api,
     reports,
     audit_logs,
-    admin,
 )
 
 from app.core.logging import configure_logging
@@ -67,7 +66,16 @@ async def lifespan(app: FastAPI):
             raise RuntimeError("Default SECRET_KEY used in production environment.")
         logger.info("✅ Security configuration validated")
 
-    # Auto-seed demo data logic was removed to enforce Zero-Mock policy.
+    # Verify AI Provider Configuration (Google Gemini)
+    if not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY.strip() == "" or "placeholder" in settings.GEMINI_API_KEY.lower() or "mock" in settings.GEMINI_API_KEY.lower():
+        logger.critical(
+            "FATAL: GEMINI_API_KEY is missing or invalid. The application requires a valid Gemini API key to start."
+        )
+        raise RuntimeError(
+            "Missing required environment variable: GEMINI_API_KEY. "
+            "Please configure a valid Google Gemini API key in your .env file."
+        )
+    logger.info("✅ Gemini AI configuration validated")
 
     yield
 
@@ -153,9 +161,6 @@ def create_app() -> FastAPI:
     app.include_router(reports.router, prefix=f"{prefix}/reports", tags=["Reports"])
     app.include_router(
         audit_logs.router, prefix=f"{prefix}/audit-logs", tags=["Audit Logs"]
-    )
-    app.include_router(
-        admin.router, prefix=f"{prefix}/admin", tags=["Admin Panel"]
     )
 
     # Static files mounting
