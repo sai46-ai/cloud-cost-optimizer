@@ -138,21 +138,26 @@ def update_aws_account(
             detail=f"Role ARN {role_arn} is already connected to another organization."
         )
 
-    # 3. Validate the AssumeRole trust relationship via boto3 STS (skip if server has no AWS credentials)
+    # 3. Validate the AssumeRole trust relationship via boto3 STS
     from app.core.config import get_settings as _get_settings
     _settings = _get_settings()
-    _has_server_creds = bool(_settings.AWS_ACCESS_KEY_ID and _settings.AWS_SECRET_ACCESS_KEY)
 
-    if _has_server_creds:
+    # Use user-provided credentials if supplied in the form, else fall back to server credentials
+    _access_key = getattr(data, 'aws_access_key_id', None) or _settings.AWS_ACCESS_KEY_ID
+    _secret_key = getattr(data, 'aws_secret_access_key', None) or _settings.AWS_SECRET_ACCESS_KEY
+    _session_token = getattr(data, 'aws_session_token', None) or _settings.AWS_SESSION_TOKEN
+    _has_creds = bool(_access_key and _secret_key)
+
+    if _has_creds:
         try:
             import boto3
             from botocore.exceptions import ClientError, NoCredentialsError
 
             sts_kwargs = {"region_name": _settings.AWS_REGION or "us-east-1"}
-            sts_kwargs["aws_access_key_id"] = _settings.AWS_ACCESS_KEY_ID
-            sts_kwargs["aws_secret_access_key"] = _settings.AWS_SECRET_ACCESS_KEY
-            if _settings.AWS_SESSION_TOKEN:
-                sts_kwargs["aws_session_token"] = _settings.AWS_SESSION_TOKEN
+            sts_kwargs["aws_access_key_id"] = _access_key
+            sts_kwargs["aws_secret_access_key"] = _secret_key
+            if _session_token:
+                sts_kwargs["aws_session_token"] = _session_token
 
             sts_client = boto3.client("sts", **sts_kwargs)
             external_id = f"ext-{user.org_id[:8]}"
@@ -162,24 +167,47 @@ def update_aws_account(
                 RoleSessionName="CloudWiseValidationSession",
                 ExternalId=external_id,
             )
+            logger.info("AWS STS AssumeRole validation succeeded for account %s", account_id)
+
         except NoCredentialsError:
-            logger.warning("AWS STS validation skipped: server has no credentials configured.")
+            # No usable credentials — skip validation, save and try later
+            logger.warning("AWS STS validation skipped: no valid credentials available.")
+
         except ClientError as e:
             err_code = e.response.get("Error", {}).get("Code", "Unknown")
             err_msg = e.response.get("Error", {}).get("Message", str(e))
             logger.error("AWS AssumeRole validation failed: %s - %s", err_code, err_msg)
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"AWS STS AssumeRole check failed: {err_msg} (Code: {err_code}). Verify your IAM trust relationship and External ID: ext-{user.org_id[:8]}."
-            )
+
+            if err_code == "SignatureDoesNotMatch":
+                # Server's own credentials are expired/invalid — skip pre-validation and save anyway.
+                # Live data fetch will validate credentials at runtime.
+                logger.warning(
+                    "Server AWS credentials are invalid/expired (SignatureDoesNotMatch). "
+                    "Skipping pre-validation. Account saved; live data fetch will validate."
+                )
+            elif err_code in ("AccessDenied", "InvalidClientTokenId"):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        f"AWS STS AssumeRole failed: {err_msg} (Code: {err_code}). "
+                        f"Ensure the role's trust policy allows AssumeRole from this account "
+                        f"and includes External ID: ext-{user.org_id[:8]}."
+                    )
+                )
+            else:
+                # For other errors (e.g., NoSuchEntity, MalformedInput) — surface clearly
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"AWS STS AssumeRole check failed: {err_msg} (Code: {err_code}). Verify your IAM trust relationship and External ID: ext-{user.org_id[:8]}."
+                )
+
         except Exception as e:
             logger.error("Unexpected error during AWS role verification: %s", str(e))
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Failed to communicate with AWS STS: {str(e)}"
-            )
+            # Non-fatal — save the account and try at runtime
+            logger.warning("Skipping STS pre-validation due to unexpected error. Account will be saved.")
     else:
-        logger.info("AWS STS validation skipped: server has no AWS credentials configured. Account will be saved and live data fetched on demand.")
+        logger.info("AWS STS validation skipped: no AWS credentials configured on server. Account saved; live data fetch will validate.")
+
 
     # 4. Atomic database update with rollback
     account = db.query(AWSAccount).filter(AWSAccount.org_id == user.org_id).first()

@@ -112,6 +112,8 @@ class AWSCostExplorerService:
                         "region_name": settings.AWS_REGION or "us-east-1",
                         "config": self.config
                     }
+                    # Only pass explicit credentials if both are set
+                    # Otherwise boto3 uses the default chain (env vars, ~/.aws, instance role)
                     if access_key and secret_key:
                         sts_kwargs["aws_access_key_id"] = access_key
                         sts_kwargs["aws_secret_access_key"] = secret_key
@@ -119,11 +121,16 @@ class AWSCostExplorerService:
                             sts_kwargs["aws_session_token"] = session_token
                     
                     sts_client = boto3.client("sts", **sts_kwargs)
-                    assumed_role_object = sts_client.assume_role(
-                        RoleArn=role_arn,
-                        RoleSessionName="CloudWiseSession",
-                        ExternalId=aws_account.external_id or f"ext-{aws_account.org_id[:8]}",
-                    )
+                    external_id = aws_account.external_id or f"ext-{aws_account.org_id[:8]}" if aws_account.org_id else None
+
+                    assume_kwargs = {
+                        "RoleArn": role_arn,
+                        "RoleSessionName": "CloudWiseSession",
+                    }
+                    if external_id:
+                        assume_kwargs["ExternalId"] = external_id
+
+                    assumed_role_object = sts_client.assume_role(**assume_kwargs)
                     credentials = assumed_role_object["Credentials"]
                     sts_cache.set_credentials(role_arn, credentials)
                 else:
@@ -138,7 +145,7 @@ class AWSCostExplorerService:
                     config=self.config,
                 )
             
-            # Fall back to default credentials chain using settings
+            # Fall back to default credentials chain using settings (or boto3 default chain)
             access_key = settings.AWS_ACCESS_KEY_ID
             secret_key = settings.AWS_SECRET_ACCESS_KEY
             session_token = settings.AWS_SESSION_TOKEN
@@ -159,9 +166,10 @@ class AWSCostExplorerService:
             if isinstance(e, CloudWiseException):
                 raise e
             raise CloudWiseException(
-                message=f"Unable to retrieve AWS data. Possible reasons: Expired credentials, Missing IAM permissions. Details: {str(e)}",
+                message=f"Unable to retrieve AWS data. Ensure a valid IAM Role ARN is connected in Settings and the trust policy allows AssumeRole. Details: {str(e)}",
                 code="AWS_ERROR"
             )
+
 
     @retry(
         stop=stop_after_attempt(4),
