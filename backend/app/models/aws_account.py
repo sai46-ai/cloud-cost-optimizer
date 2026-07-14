@@ -21,6 +21,7 @@ class AWSAccount(Base, TimestampMixin):
     external_id: Mapped[str] = mapped_column(String(255), nullable=True)
     region: Mapped[str] = mapped_column(String(50), default="us-east-1")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
     # Relationships
     organization = relationship(

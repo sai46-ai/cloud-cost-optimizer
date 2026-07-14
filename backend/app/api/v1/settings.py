@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.api.deps import get_current_user
@@ -206,6 +206,8 @@ def update_aws_account(
     try:
         db.commit()
         db.refresh(account)
+        from app.services.aws_cost_explorer import cost_explorer_service
+        cost_explorer_service.clear_cache_for_account(account_id)
     except Exception as e:
         db.rollback()
         logger.error("Failed to commit AWS Account integration: %s", str(e))

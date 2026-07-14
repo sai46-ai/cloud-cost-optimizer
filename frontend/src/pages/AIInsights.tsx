@@ -22,7 +22,7 @@ export default function AIInsights() {
     }
   ]);
   const [input, setInput] = useState('');
-  const [provider, setProvider] = useState<'gemini' | 'openai'>('gemini');
+
   const [isTyping, setIsTyping] = useState(false);
   const [loading, setLoading] = useState(true);
   const [hasAWSError, setHasAWSError] = useState(false);
@@ -69,7 +69,7 @@ export default function AIInsights() {
     setIsTyping(true);
 
     try {
-      const response = await aiService.chat(text, provider);
+      const response = await aiService.chat(text);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
         content: response.response,
@@ -228,14 +228,9 @@ export default function AIInsights() {
             </div>
           </div>
           <div>
-            <select
-              value={provider}
-              onChange={(e) => setProvider(e.target.value as 'gemini' | 'openai')}
-              className="flex h-9 rounded-lg border border-border-primary bg-background-primary px-2.5 py-1 text-xs font-semibold text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-primary/30 focus:border-accent-primary cursor-pointer hover:bg-background-elevated transition-all"
-            >
-              <option value="gemini">Google Gemini</option>
-              <option value="openai">ChatGPT (GPT-4o)</option>
-            </select>
+            <div className="flex h-9 items-center rounded-lg border border-border-primary bg-background-primary px-3 text-xs font-semibold text-text-secondary select-none">
+              Google Gemini
+            </div>
           </div>
         </div>
 

@@ -68,14 +68,11 @@ async def lifespan(app: FastAPI):
 
     # Verify AI Provider Configuration (Google Gemini)
     if not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY.strip() == "" or "placeholder" in settings.GEMINI_API_KEY.lower() or "mock" in settings.GEMINI_API_KEY.lower():
-        logger.critical(
-            "FATAL: GEMINI_API_KEY is missing or invalid. The application requires a valid Gemini API key to start."
+        logger.warning(
+            "WARNING: GEMINI_API_KEY is missing or invalid. The application will fall back to the FinOps Knowledge Base for AI assistance."
         )
-        raise RuntimeError(
-            "Missing required environment variable: GEMINI_API_KEY. "
-            "Please configure a valid Google Gemini API key in your .env file."
-        )
-    logger.info("✅ Gemini AI configuration validated")
+    else:
+        logger.info("✅ Gemini AI configuration validated")
 
     yield
 
@@ -132,6 +129,18 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=status_code,
             content={"detail": exc.message, "code": exc.code},
+        )
+
+    # Global exception handler for uncaught generic exceptions
+    @app.exception_handler(Exception)
+    async def generic_exception_handler(request: Request, exc: Exception):
+        logger.error(f"Unhandled exception during request processing: {str(exc)}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "detail": "An unexpected error occurred. Please contact the system administrator.",
+                "code": "INTERNAL_ERROR",
+            },
         )
 
     # Register API v1 routes

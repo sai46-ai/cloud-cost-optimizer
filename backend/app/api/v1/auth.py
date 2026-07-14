@@ -138,3 +138,24 @@ def change_password(
     )
     return {"message": "Password changed successfully"}
 
+
+@router.post("/logout")
+def logout(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Log out the current user and write audit trail."""
+    AuditService.log_action(
+        db=db,
+        user_id=user.id,
+        action="logout",
+        resource_type="user",
+        resource_id=user.id,
+        description=f"User logged out: {user.email}",
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    return {"message": "Logged out successfully"}
+
+

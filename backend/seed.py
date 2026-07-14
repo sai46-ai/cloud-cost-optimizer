@@ -76,7 +76,8 @@ def seed_user_data(user, db):
             role_arn=f"arn:aws:iam::{account_id}:role/CloudWiseReadOnlyRole",
             external_id=f"ext-{user.id[:8]}",
             region="us-east-1",
-            is_active=True
+            is_active=True,
+            is_demo=True
         )
         db.add(account)
         db.commit()

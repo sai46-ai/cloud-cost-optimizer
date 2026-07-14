@@ -9,6 +9,7 @@ import json
 from typing import Optional, Generator, Dict, Any, List, AsyncGenerator
 from sqlalchemy.orm import Session
 import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from app.core.config import get_settings
 from app.services.cost_service import CostService
@@ -30,52 +31,25 @@ FINOPS_KB = {
 
 
 class AIService:
-    """Centralized AI Service using Google Gemini and OpenAI APIs."""
+    """Centralized AI Service using Google Gemini."""
 
     def __init__(self, db: Session):
         self.db = db
         self.cost_service = CostService(db)
 
-    async def chat(self, message: str, provider: str = "gemini", user_id: Optional[str] = None) -> dict:
-        """Process a user message and return a response using the selected provider."""
+    async def chat(self, message: str, user_id: Optional[str] = None) -> dict:
+        """Process a user message and return a response using Google Gemini."""
         message_lower = message.lower().strip()
-        provider_lower = provider.lower().strip()
 
-        # Route to ChatGPT/OpenAI if requested
-        if provider_lower in ["openai", "chatgpt"]:
-            try:
-                response = await self._chatgpt_response(message, user_id)
-                return {
-                    "response": response,
-                    "source": "chatgpt",
-                    "suggestions": self._get_suggestions(message_lower),
-                }
-            except Exception as e:
-                logger.warning(f"OpenAI API call failed, falling back to rule-based KB: {e}")
-
-        # Route to Gemini
-        else:
-            try:
-                response = await self._gemini_response(message, user_id)
-                return {
-                    "response": response,
-                    "source": "gemini_ai",
-                    "suggestions": self._get_suggestions(message_lower),
-                }
-            except Exception as e:
-                logger.warning(f"Gemini API call failed: {e}")
-                # Try OpenAI as fallback before KB if key exists
-                if settings.OPENAI_API_KEY:
-                    try:
-                        logger.info("Trying OpenAI API as fallback for Gemini")
-                        response = await self._chatgpt_response(message, user_id)
-                        return {
-                            "response": response,
-                            "source": "chatgpt",
-                            "suggestions": self._get_suggestions(message_lower),
-                        }
-                    except Exception as ex:
-                        logger.warning(f"OpenAI fallback call failed: {ex}")
+        try:
+            response = await self._gemini_response(message, user_id)
+            return {
+                "response": response,
+                "source": "gemini_ai",
+                "suggestions": self._get_suggestions(message_lower),
+            }
+        except Exception as e:
+            logger.warning(f"Gemini API call failed: {e}")
 
         # Rule-based fallback if Gemini API call fails at runtime
         response = self._rule_based_response(message_lower, user_id)
@@ -266,6 +240,9 @@ class AIService:
 
     async def _gemini_response(self, message: str, user_id: Optional[str] = None) -> str:
         """Generate response using Google Gemini API."""
+        if not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY.strip() == "" or "placeholder" in settings.GEMINI_API_KEY.lower() or "mock" in settings.GEMINI_API_KEY.lower():
+            raise Exception("Gemini API key is not configured or is invalid.")
+
         system_prompt = (
             "You are CloudWise AI, an expert FinOps assistant specializing in AWS cost optimization and cloud economics. "
             "Provide concise, actionable advice about AWS billing, cost optimization, rightsizing, and cloud architecture. "
@@ -296,76 +273,40 @@ class AIService:
             ]
         }
 
+        try:
+            data = await self._call_gemini_api(url, payload)
+            candidates = data.get("candidates", [])
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                if parts:
+                    return parts[0].get("text", "").strip()
+            raise Exception("Invalid or empty response format from Gemini API")
+        except Exception as e:
+            logger.error(f"Gemini API invocation failed: {e}")
+            raise e
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=6),
+        retry=retry_if_exception_type(httpx.HTTPStatusError),
+        reraise=True
+    )
+    async def _call_gemini_api(self, url: str, payload: dict) -> dict:
+        """Call Gemini API with retry on transient status errors (429, 5xx)."""
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(url, json=payload)
-            if resp.status_code == 200:
-                data = resp.json()
-                candidates = data.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts:
-                        return parts[0].get("text", "").strip()
-            logger.error(f"Gemini API returned status {resp.status_code}: {resp.text}")
-            raise Exception(f"Gemini API error (Status {resp.status_code})")
-
-    async def _chatgpt_response(self, message: str, user_id: Optional[str] = None) -> str:
-        """Generate response using OpenAI ChatGPT API."""
-        if not settings.OPENAI_API_KEY:
-            raise Exception("OpenAI API key is not configured.")
-
-        system_prompt = (
-            "You are CloudWise AI, an expert FinOps assistant specializing in AWS cost optimization and cloud economics. "
-            "Provide concise, actionable advice about AWS billing, cost optimization, rightsizing, and cloud architecture. "
-            "Use clear markdown formatting. Be specific with AWS service names and pricing details.\n\n"
-            "CRITICAL ENVIRONMENT CONSTRAINTS:\n"
-            "Note that this environment uses AWS Academy Accounts. Creating permanent IAM users or generating long-term "
-            "AWS Access Keys is NOT permitted because AWS Academy Learner Lab operates under a restricted 'voclabs' role. "
-            "Advise users to supply temporary credentials (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_SESSION_TOKEN) when requested."
-        )
-
-        # Inject live context if available
-        if user_id:
-            cost_info = self._get_cost_context(user_id)
-            system_prompt += f"\n\nCURRENT USER COST DATA:\n{cost_info}"
-            
-            active_anomalies = self._get_active_anomalies(user_id)
-            if active_anomalies:
-                anomaly_info = "\n".join(
-                    f"- Service: {a.service}, Severity: {a.severity}, Impact: +${a.impact_amount:,.2f}, Cause: {a.root_cause}"
-                    for a in active_anomalies
-                )
-                system_prompt += f"\n\nACTIVE COST ANOMALIES:\n{anomaly_info}"
-
-        url = "https://api.openai.com/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": settings.OPENAI_MODEL,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": message}
-            ],
-            "temperature": 0.7
-        }
-
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-            if resp.status_code == 200:
-                data = resp.json()
-                choices = data.get("choices", [])
-                if choices:
-                    return choices[0].get("message", {}).get("content", "").strip()
-            logger.error(f"OpenAI API returned status {resp.status_code}: {resp.text}")
-            raise Exception(f"OpenAI API error (Status {resp.status_code})")
+            if resp.status_code in [429, 500, 502, 503, 504]:
+                logger.warning(f"Transient error from Gemini API: {resp.status_code}. Retrying...")
+                resp.raise_for_status()
+            elif resp.status_code != 200:
+                logger.error(f"Non-retryable Gemini error: {resp.status_code} - {resp.text}")
+                resp.raise_for_status()
+            return resp.json()
 
     async def chat_stream(
-        self, message: str, provider: str = "gemini", user_id: Optional[str] = None
+        self, message: str, user_id: Optional[str] = None
     ) -> AsyncGenerator[str, None]:
-        """Stream chat responses from the chosen provider."""
-        provider = provider.lower().strip()
-        
+        """Stream chat responses from Google Gemini API, falling back to rule-based KB on failure."""
         system_prompt = (
             "You are CloudWise AI, an expert FinOps assistant specializing in AWS cost optimization and cloud economics. "
             "Provide concise, actionable advice about AWS billing, cost optimization, rightsizing, and cloud architecture. "
@@ -387,100 +328,54 @@ class AIService:
                 )
                 system_prompt += f"\n\nACTIVE COST ANOMALIES:\n{anomaly_info}"
 
-        if provider in ["openai", "chatgpt"]:
-            if not settings.OPENAI_API_KEY:
-                fallback = self._rule_based_response(message.lower().strip(), user_id)
-                for chunk in self._split_text_to_chunks(fallback):
-                    yield json.dumps({"text": chunk, "source": "knowledge_base"})
-                    await asyncio.sleep(0.01)
-                return
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.GEMINI_MODEL}:streamGenerateContent?key={settings.GEMINI_API_KEY}"
+        payload = {
+            "contents": [
+                {"parts": [{"text": f"{system_prompt}\n\nUser Question: {message}"}]}
+            ]
+        }
 
-            url = "https://api.openai.com/v1/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": settings.OPENAI_MODEL,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": message}
-                ],
-                "stream": True,
-                "temperature": 0.7
-            }
-
-            try:
-                async with httpx.AsyncClient(timeout=15.0) as client:
-                    async with client.stream("POST", url, headers=headers, json=payload) as response:
-                        if response.status_code != 200:
-                            raise Exception(f"OpenAI error status: {response.status_code}")
-                        async for line in response.aiter_lines():
-                            if line.startswith("data: "):
-                                data_str = line[6:].strip()
-                                if data_str == "[DONE]":
-                                    break
-                                try:
-                                    data_json = json.loads(data_str)
-                                    content = data_json["choices"][0]["delta"].get("content", "")
-                                    if content:
-                                        yield json.dumps({"text": content, "source": "chatgpt"})
-                                except Exception:
-                                    continue
-                return
-            except Exception as e:
-                logger.warning(f"OpenAI stream failed: {e}")
-
-        # Default Gemini streaming
-        if provider == "gemini":
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.GEMINI_MODEL}:streamGenerateContent?key={settings.GEMINI_API_KEY}"
-            payload = {
-                "contents": [
-                    {"parts": [{"text": f"{system_prompt}\n\nUser Question: {message}"}]}
-                ]
-            }
-
-            try:
-                async with httpx.AsyncClient(timeout=15.0) as client:
-                    async with client.stream("POST", url, json=payload) as response:
-                        if response.status_code != 200:
-                            raise Exception(f"Gemini error status: {response.status_code}")
-                        
-                        buffer = ""
-                        async for chunk in response.aiter_text():
-                            buffer += chunk
-                            while True:
-                                buffer = buffer.strip()
-                                if not buffer:
-                                    break
-                                start = buffer.find("{")
-                                if start == -1:
-                                    break
-                                brace_count = 0
-                                end = -1
-                                for i in range(start, len(buffer)):
-                                    if buffer[i] == "{":
-                                        brace_count += 1
-                                    elif buffer[i] == "}":
-                                        brace_count -= 1
-                                        if brace_count == 0:
-                                            end = i
-                                            break
-                                if end == -1:
-                                    break
-                                
-                                obj_str = buffer[start:end+1]
-                                buffer = buffer[end+1:]
-                                try:
-                                    obj = json.loads(obj_str)
-                                    text = obj["candidates"][0]["content"]["parts"][0]["text"]
-                                    if text:
-                                        yield json.dumps({"text": text, "source": "gemini_ai"})
-                                except Exception:
-                                    pass
-                return
-            except Exception as e:
-                logger.warning(f"Gemini stream failed: {e}")
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                async with client.stream("POST", url, json=payload) as response:
+                    if response.status_code != 200:
+                        raise Exception(f"Gemini error status: {response.status_code}")
+                    
+                    buffer = ""
+                    async for chunk in response.aiter_text():
+                        buffer += chunk
+                        while True:
+                            buffer = buffer.strip()
+                            if not buffer:
+                                break
+                            start = buffer.find("{")
+                            if start == -1:
+                                break
+                            brace_count = 0
+                            end = -1
+                            for i in range(start, len(buffer)):
+                                if buffer[i] == "{":
+                                    brace_count += 1
+                                elif buffer[i] == "}":
+                                    brace_count -= 1
+                                    if brace_count == 0:
+                                        end = i
+                                        break
+                            if end == -1:
+                                break
+                            
+                            obj_str = buffer[start:end+1]
+                            buffer = buffer[end+1:]
+                            try:
+                                obj = json.loads(obj_str)
+                                text = obj["candidates"][0]["content"]["parts"][0]["text"]
+                                if text:
+                                    yield json.dumps({"text": text, "source": "gemini_ai"})
+                            except Exception:
+                                pass
+            return
+        except Exception as e:
+            logger.warning(f"Gemini stream failed: {e}")
 
         # Fallback to rule-based response
         fallback = self._rule_based_response(message.lower().strip(), user_id)

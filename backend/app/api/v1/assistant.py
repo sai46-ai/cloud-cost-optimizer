@@ -18,7 +18,6 @@ router = APIRouter()
 
 class ChatRequest(BaseModel):
     message: str
-    provider: Optional[str] = "gemini"
 
 
 class ChatResponse(BaseModel):
@@ -35,7 +34,7 @@ async def chat(
 ):
     """Send a message to the AI FinOps assistant."""
     assistant = AIService(db)
-    return await assistant.chat(data.message, provider=data.provider or "gemini", user_id=user.id)
+    return await assistant.chat(data.message, user_id=user.id)
 
 
 @router.post("/chat/stream", dependencies=[Depends(rate_limiter)])
@@ -47,6 +46,6 @@ async def chat_stream(
     """Stream response from the AI assistant."""
     assistant = AIService(db)
     return StreamingResponse(
-        assistant.chat_stream(data.message, provider=data.provider or "gemini", user_id=user.id),
+        assistant.chat_stream(data.message, user_id=user.id),
         media_type="text/event-stream"
     )

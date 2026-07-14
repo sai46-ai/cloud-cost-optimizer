@@ -16,6 +16,8 @@ CloudWise AI is an enterprise-grade cloud cost optimization, rightsizing, and Fi
 ## 🌟 Core Capabilities
 
 - **Executive FinOps Dashboard**: Real-time Key Performance Indicators (KPIs), spend velocity metrics, month-to-date (MTD) tracking, budget health indicators, and interactive trend charts.
+- **High-Performance Caching & Parallel API Layer**: Custom in-memory credentials caching (`STSConnectionCache`) to prevent repeated AssumeRole requests, thread-safe endpoint response caching (`InMemoryCache`), and concurrent AWS API parallel execution via `ThreadPoolExecutor` (cutting metrics loading time from 5x sequential latency to 1x parallel latency).
+- **Demo Mode Isolation Engine**: Automated database-level identification (`is_demo` flag in `AWSAccount`) ensuring seeded mock cost data behaves completely independently of real user-connected AWS integrations, preventing STS timeouts and credentials friction.
 - **Multi-Cloud Architecture**: Modular cloud provider interfaces (`app/providers/`) supporting AWS, Google Cloud Platform (GCP), and Microsoft Azure integrations.
 - **Granular Cost Analytics**: Multi-dimensional cost breakdown by cloud services, regions, accounts, and dates with stacked bar charts and comparison tables.
 - **ML Anomaly Detection**: Built-in machine learning module using Isolation Forest algorithms to detect cost spikes or drops, scoring severities (critical, high, medium, low) with automated root-cause analysis.
@@ -100,11 +102,11 @@ Cloud Wise/
 │   │   ├── schemas/            # Pydantic validation schemas
 │   │   ├── services/           # Core business logic services (Cost, Budget, Report, Recommendation)
 │   │   ├── tasks/              # Celery background periodic jobs
-│   │   ├── database.py         # SQLAlchemy engine & session management
+│   │   ├── database.py         # SQLAlchemy engine & session management with auto-migrations
 │   │   └── main.py             # FastAPI app factory and middleware
 │   ├── alembic/                # Database migration scripts
 │   ├── static/                 # Storage for generated reports
-│   ├── full_api_and_runtime_verification.py # Automated E2E verification test suite
+│   ├── test_endpoints.py       # Automated E2E verification test suite
 │   ├── requirements.txt        # Backend dependencies
 │   └── Dockerfile              # Container definition for backend
 ├── frontend/
@@ -119,6 +121,7 @@ Cloud Wise/
 │   └── Dockerfile              # Multi-stage Nginx container definition
 ├── docker-compose.yml          # Container orchestration manifest
 ├── .env.example                # Environment configuration template
+├── PROJECT_INPUTS_REQUIRED.md  # Missing production credentials guide
 └── README.md                   # Project documentation
 ```
 
@@ -200,6 +203,8 @@ python -m venv .venv
 source .venv/bin/activate
 
 pip install -r requirements.txt
+# Run database migrations
+alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 Backend API will be live at `http://127.0.0.1:8000` (Docs at `http://127.0.0.1:8000/docs`).
@@ -229,14 +234,13 @@ docker-compose up --build -d
 
 ## 🧪 Verification Suite
 
-Run the automated runtime verification suite against the backend:
-
+Run the automated E2E verification suite against the backend:
 ```bash
 cd backend
-python full_api_and_runtime_verification.py
+.venv\Scripts\python.exe test_endpoints.py
 ```
 
-To verify the frontend TypeScript and production bundle:
+To verify the frontend TypeScript and production bundle compilation:
 ```bash
 cd frontend
 npm run build

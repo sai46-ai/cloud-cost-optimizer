@@ -58,7 +58,7 @@ if ($response -eq 'y' -or $response -eq 'Y') {
     Write-Host "`nNext Steps:" -ForegroundColor Cyan
     Write-Host "1. Build your frontend (npm run build) and upload to the S3 bucket."
     Write-Host "2. Build your Docker images and push them to the ECR repositories."
-    Write-Host "3. Set your VITE_GEMINI_API_KEY in AWS Secrets Manager."
+    Write-Host "3. Set your GEMINI_API_KEY in AWS Secrets Manager."
 } else {
     Write-Host "`nDeployment cancelled." -ForegroundColor Yellow
 }

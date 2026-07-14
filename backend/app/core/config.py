@@ -51,9 +51,6 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_MODEL: str = "gemini-3.5-flash"
 
-    # OpenAI / ChatGPT AI
-    OPENAI_API_KEY: Optional[str] = None
-    OPENAI_MODEL: str = "gpt-4o-mini"
 
     # S3
     S3_BUCKET_REPORTS: str = "cloudwise-reports"

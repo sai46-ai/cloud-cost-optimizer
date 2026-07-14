@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import useStore from '../store';
 
 // Base URL for the FastAPI backend. Proxy is set up in vite.config.ts to forward /api to http://localhost:8000.
 export const BACKEND_URL = '/api/v1';
@@ -43,9 +43,8 @@ api.interceptors.response.use(
         // Clear token and user state to prevent infinite 401 loop
         localStorage.removeItem('access_token');
         try {
-          const storeModule = await import('../store');
-          storeModule.default.getState().setAuthenticated(false);
-          storeModule.default.getState().setUser(null);
+          useStore.getState().setAuthenticated(false);
+          useStore.getState().setUser(null);
         } catch (e) {
           console.error("Failed to reset auth state:", e);
         }
@@ -185,43 +184,18 @@ export const aiService = {
     const response = await api.post('/forecasts/generate');
     return response.data;
   },
-  chat: async (message: string, provider: string = 'gemini') => {
+  chat: async (message: string) => {
     const msgLower = message.toLowerCase().trim();
     
-    // 1. Direct client-side Google AI call if key is set in environment (only for gemini)
-    if (provider === 'gemini') {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (apiKey && apiKey !== 'your_gemini_api_key_here' && apiKey.trim() !== '') {
-        try {
-          const genAI = new GoogleGenerativeAI(apiKey);
-          const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-          const systemPrompt = (
-            "You are CloudWise AI, an expert FinOps assistant specializing in AWS cost optimization and cloud economics. " +
-            "Provide concise, actionable advice about AWS billing, cost optimization, rightsizing, and cloud architecture. " +
-            "Use clear markdown formatting. Be specific with AWS service names and pricing details."
-          );
-          const result = await model.generateContent(`${systemPrompt}\n\nUser Question: ${message}`);
-          const response = await result.response;
-          return {
-            response: response.text().trim(),
-            source: 'gemini_ai',
-            suggestions: ['How can I reduce EC2 costs?', 'Explain S3 lifecycle rules', 'How are budgets monitored?']
-          };
-        } catch (err: any) {
-          console.error('Direct Google Gemini API call failed:', err);
-        }
-      }
-    }
-
-    // 2. Fall back to backend AI chat endpoint
+    // 1. Send message to backend AI chat endpoint
     try {
-      const response = await api.post('/assistant/chat', { message, provider });
+      const response = await api.post('/assistant/chat', { message });
       return response.data;
     } catch (err: any) {
       console.warn('Backend assistant chat call failed. Falling back to local rule-based response.', err);
     }
 
-    // 3. Local high fidelity rule-based fallback response
+    // 2. Local high fidelity rule-based fallback response
     let responseText = "I can help you understand your cloud costs and find savings opportunities. Try asking about: cost reductions, EC2 spending, budget policies, anomaly detection or forecasts.";
     
     if (msgLower.includes('reduce') || msgLower.includes('save') || msgLower.includes('cut')) {

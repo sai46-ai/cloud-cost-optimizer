@@ -61,3 +61,7 @@ celerybeat.pid
 
 # Logs directory
 logs/
+
+# Local Dev Scratch & Tests
+backend/scratch/
+frontend/test-results/
