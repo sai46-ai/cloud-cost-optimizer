@@ -312,7 +312,14 @@ export default function Settings() {
                       onChange={(e) => setAwsRoleArn(e.target.value)}
                       required
                     />
-                    <p className="text-xs text-text-muted mt-2">Use the CloudFormation template to create this role automatically.</p>
+                    <div className="mt-3 p-3 bg-background-elevated border border-border-primary rounded-md">
+                      <p className="text-sm text-text-primary mb-2">
+                        <span className="font-medium text-accent-primary">Important:</span> When creating your IAM Role in AWS, you must check "Require external ID" and set it exactly to:
+                      </p>
+                      <code className="text-accent-cyan font-mono bg-accent-cyan/10 px-2 py-1 rounded text-sm select-all inline-block border border-accent-cyan/20">
+                        {user?.org_id ? `ext-${user.org_id.substring(0, 8)}` : 'Loading...'}
+                      </code>
+                    </div>
                   </div>
                   
                   <div className="pt-4 flex gap-3">
