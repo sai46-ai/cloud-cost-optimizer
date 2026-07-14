@@ -92,6 +92,7 @@ class AuthService:
         # Update last login timestamp
         from datetime import datetime, timezone
         user.last_login = datetime.now(timezone.utc)
+        self.db.add(user)
         self.db.commit()
         
         # If user is in demo mode, ensure demo data is seeded

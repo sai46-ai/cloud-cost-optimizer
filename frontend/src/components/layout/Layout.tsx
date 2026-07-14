@@ -14,38 +14,6 @@ const PageFallback = () => (
 );
 
 const ConnectionBanner = () => {
-  const user = useStore((state) => state.user);
-  const awsConnectionFailed = useStore((state) => state.awsConnectionFailed);
-  const location = useLocation();
-
-  if (!user || location.pathname === '/settings') return null;
-
-  if (awsConnectionFailed) {
-    return (
-      <div className="mx-8 mt-6 bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-xl text-sm flex items-center justify-between shadow-sm animate-fade-in select-none">
-        <div className="flex items-center gap-3">
-          <AlertCircle size={18} className="text-red-400 shrink-0" />
-          <div>
-            <span className="font-semibold">AWS Connection Failed:</span> Falling back to the demo cost workspace. Please verify your AWS IAM credentials in <a href="/settings?tab=aws" className="underline font-semibold hover:text-red-300">Settings</a>.
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (user.is_demo_mode && !user.is_aws_connected) {
-    return (
-      <div className="mx-8 mt-6 bg-amber-500/10 border border-amber-500/20 text-amber-400 px-4 py-3 rounded-xl text-sm flex items-center justify-between shadow-sm animate-fade-in select-none">
-        <div className="flex items-center gap-3">
-          <InfoIcon size={18} className="text-amber-400 shrink-0" />
-          <div>
-            <span className="font-semibold">Demo Workspace:</span> Currently viewing realistic demo cloud cost data. Connect your AWS Account in <a href="/settings?tab=aws" className="underline font-semibold hover:text-amber-300">Settings</a> to load live production metrics.
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return null;
 };
 

@@ -240,6 +240,28 @@ if is_mongodb:
                             self.filter_dict[k].update(v)
                         else:
                             self.filter_dict[k] = v
+                elif hasattr(cond, "left") and hasattr(cond, "right"):
+                    # SQLAlchemy BinaryExpression (e.g. Model.field == value)
+                    k = cond.left.key if hasattr(cond.left, "key") else cond.left.name
+                    v = cond.right.value if hasattr(cond.right, "value") else cond.right
+                    op = cond.operator.__name__ if hasattr(cond.operator, "__name__") else str(cond.operator)
+                    v = MongoQuery._coerce_dates(v)
+                    if op == "eq":
+                        self.filter_dict[k] = v
+                    elif op == "ne":
+                        self.filter_dict[k] = {"$ne": v}
+                    elif op == "lt":
+                        self.filter_dict[k] = {"$lt": v}
+                    elif op == "le":
+                        self.filter_dict[k] = {"$lte": v}
+                    elif op == "gt":
+                        self.filter_dict[k] = {"$gt": v}
+                    elif op == "ge":
+                        self.filter_dict[k] = {"$gte": v}
+                    elif op == "in_op":
+                        self.filter_dict[k] = {"$in": v}
+                    else:
+                        self.filter_dict[k] = v  # fallback for ==
             return self
             
         def filter_by(self, **kwargs):

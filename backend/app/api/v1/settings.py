@@ -54,6 +54,7 @@ def update_settings(
     for key, value in data.model_dump().items():
         setattr(settings, key, value)
 
+    db.add(settings)
     db.commit()
     db.refresh(settings)
 
@@ -231,6 +232,8 @@ def update_aws_account(
     if data.region:
         account.region = data.region
     account.is_active = True
+
+    db.add(account)
 
     try:
         db.commit()

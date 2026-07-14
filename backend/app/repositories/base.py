@@ -43,6 +43,7 @@ class BaseRepository(Generic[ModelType]):
         for key, value in update_data.items():
             if value is not None and hasattr(entity, key):
                 setattr(entity, key, value)
+        self.db.add(entity)
         self.db.commit()
         self.db.refresh(entity)
         return entity
