@@ -38,6 +38,7 @@ export default function Settings() {
   // AWS tab states
   const [awsAccountId, setAwsAccountId] = useState('');
   const [awsRoleArn, setAwsRoleArn] = useState('');
+  const [masterAccountId, setMasterAccountId] = useState('');
   const [isConnectingAWS, setIsConnectingAWS] = useState(false);
 
   // Security tab states
@@ -86,6 +87,7 @@ export default function Settings() {
         const data = await settingsService.getAWSAccount();
         setAwsAccountId(data.account_id || '');
         setAwsRoleArn(data.role_arn || '');
+        setMasterAccountId(data.master_account_id || '');
       } catch (err) {
         console.error('Failed to fetch AWS settings:', err);
       }
@@ -312,13 +314,25 @@ export default function Settings() {
                       onChange={(e) => setAwsRoleArn(e.target.value)}
                       required
                     />
-                    <div className="mt-3 p-3 bg-background-elevated border border-border-primary rounded-md">
-                      <p className="text-sm text-text-primary mb-2">
-                        <span className="font-medium text-accent-primary">Important:</span> When creating your IAM Role in AWS, you must check "Require external ID" and set it exactly to:
+                    <div className="mt-3 p-4 bg-background-elevated border border-border-primary rounded-md space-y-3">
+                      <p className="text-sm text-text-primary">
+                        <span className="font-medium text-accent-primary">Important:</span> When creating your IAM Role in AWS, you must configure the following trust values:
                       </p>
-                      <code className="text-accent-cyan font-mono bg-accent-cyan/10 px-2 py-1 rounded text-sm select-all inline-block border border-accent-cyan/20">
-                        {user?.org_id ? `ext-${user.org_id.substring(0, 8)}` : 'Loading...'}
-                      </code>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-border-primary/50">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs text-text-muted">SaaS AWS Account ID to Trust</span>
+                          <code className="text-accent-cyan font-mono bg-accent-cyan/10 px-2 py-1 rounded text-xs select-all w-fit border border-accent-cyan/20">
+                            {masterAccountId || 'Loading...'}
+                          </code>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs text-text-muted">External ID</span>
+                          <code className="text-accent-cyan font-mono bg-accent-cyan/10 px-2 py-1 rounded text-xs select-all w-fit border border-accent-cyan/20">
+                            {user?.org_id ? `ext-${user.org_id.substring(0, 8)}` : 'Loading...'}
+                          </code>
+                        </div>
+                      </div>
                     </div>
                   </div>
                   

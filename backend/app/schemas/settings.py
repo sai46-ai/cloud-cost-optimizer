@@ -41,3 +41,4 @@ class AWSAccountResponse(BaseModel):
     region: str
     is_active: bool
     is_demo: bool = False
+    master_account_id: str | None = None

@@ -79,6 +79,25 @@ def get_aws_account(
 ):
     """Get connected AWS Account details for user's organization."""
     account = db.query(AWSAccount).filter(AWSAccount.org_id == user.org_id).first()
+    
+    # Dynamically fetch the master AWS account ID using STS client (from configured credentials)
+    master_account_id = None
+    from app.core.config import get_settings as _get_settings
+    _settings = _get_settings()
+    if _settings.AWS_ACCESS_KEY_ID and _settings.AWS_SECRET_ACCESS_KEY:
+        try:
+            import boto3
+            sts_kwargs = {"region_name": _settings.AWS_REGION or "us-east-1"}
+            sts_kwargs["aws_access_key_id"] = _settings.AWS_ACCESS_KEY_ID
+            sts_kwargs["aws_secret_access_key"] = _settings.AWS_SECRET_ACCESS_KEY
+            if _settings.AWS_SESSION_TOKEN:
+                sts_kwargs["aws_session_token"] = _settings.AWS_SESSION_TOKEN
+            
+            sts_client = boto3.client("sts", **sts_kwargs)
+            master_account_id = sts_client.get_caller_identity()["Account"]
+        except Exception:
+            pass
+
     if not account:
         # Return empty response — user must configure their own AWS account
         return AWSAccountResponse(
@@ -90,8 +109,21 @@ def get_aws_account(
             external_id=None,
             region="",
             is_active=False,
+            master_account_id=master_account_id,
         )
-    return account
+    
+    return AWSAccountResponse(
+        id=account.id,
+        org_id=account.org_id,
+        account_id=account.account_id,
+        account_name=account.account_name,
+        role_arn=account.role_arn,
+        external_id=account.external_id,
+        region=account.region,
+        is_active=account.is_active,
+        is_demo=account.is_demo,
+        master_account_id=master_account_id,
+    )
 
 
 @router.put("/aws", response_model=AWSAccountResponse)
