@@ -246,22 +246,32 @@ if is_mongodb:
                     v = cond.right.value if hasattr(cond.right, "value") else cond.right
                     op = cond.operator.__name__ if hasattr(cond.operator, "__name__") else str(cond.operator)
                     v = MongoQuery._coerce_dates(v)
+                    
+                    val_dict = None
                     if op == "eq":
-                        self.filter_dict[k] = v
+                        val_dict = v
                     elif op == "ne":
-                        self.filter_dict[k] = {"$ne": v}
+                        val_dict = {"$ne": v}
                     elif op == "lt":
-                        self.filter_dict[k] = {"$lt": v}
+                        val_dict = {"$lt": v}
                     elif op == "le":
-                        self.filter_dict[k] = {"$lte": v}
+                        val_dict = {"$lte": v}
                     elif op == "gt":
-                        self.filter_dict[k] = {"$gt": v}
+                        val_dict = {"$gt": v}
                     elif op == "ge":
-                        self.filter_dict[k] = {"$gte": v}
+                        val_dict = {"$gte": v}
                     elif op == "in_op":
-                        self.filter_dict[k] = {"$in": v}
+                        val_dict = {"$in": v}
+                    elif op == "notin_op":
+                        val_dict = {"$nin": v}
                     else:
-                        self.filter_dict[k] = v  # fallback for ==
+                        val_dict = v  # fallback for ==
+                        
+                    if val_dict is not None:
+                        if k in self.filter_dict and isinstance(self.filter_dict[k], dict) and isinstance(val_dict, dict):
+                            self.filter_dict[k].update(val_dict)
+                        else:
+                            self.filter_dict[k] = val_dict
             return self
             
         def filter_by(self, **kwargs):
