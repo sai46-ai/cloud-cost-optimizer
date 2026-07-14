@@ -37,11 +37,6 @@ export default function Budgets() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadData = useCallback(async () => {
-    if (user && !user.is_demo_mode && !user.is_aws_connected) {
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setHasAWSError(false);
     try {
@@ -175,9 +170,6 @@ export default function Budgets() {
     return <Badge variant="healthy">On Track</Badge>;
   };
 
-  if (user && !user.is_demo_mode && !user.is_aws_connected) {
-    return <AWSOnboardingState />;
-  }
 
   if (hasAWSError) {
     return <AWSErrorState onRetry={loadData} isLoading={loading} />;

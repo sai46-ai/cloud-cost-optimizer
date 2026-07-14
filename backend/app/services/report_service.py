@@ -8,10 +8,10 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
 
-from app.models.report import Report
-from app.models.cost_record import CostRecord
-from app.models.anomaly import Anomaly
-from app.models.recommendation import Recommendation
+from app.models.report import Report, DemoReport, AWSReport
+from app.models.cost_record import CostRecord, DemoCostRecord, AWSCostRecord
+from app.models.anomaly import Anomaly, DemoAnomaly, AWSAnomaly
+from app.models.recommendation import Recommendation, DemoRecommendation, AWSRecommendation
 from app.models.user import User
 from app.models.aws_account import AWSAccount
 from app.core.exceptions import CloudWiseException
@@ -26,17 +26,26 @@ class ReportService:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_reports(self, user_id: str) -> list[Report]:
+    def get_reports(self, user_id: str) -> list[Any]:
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return []
+        model = DemoReport if user.is_demo_mode else AWSReport
         return (
-            self.db.query(Report)
-            .filter(Report.user_id == user_id)
-            .order_by(Report.generated_at.desc())
+            self.db.query(model)
+            .filter(model.user_id == user_id)
+            .order_by(model.generated_at.desc())
             .all()
         )
 
     def generate_report(
         self, user_id: str, report_type: str, file_format: str
-    ) -> Report:
+    ) -> Any:
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise CloudWiseException("User not found", code="NOT_FOUND")
+
+        model = DemoReport if user.is_demo_mode else AWSReport
         # Create a report entry in db
         filename = f"report_{report_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{file_format}"
         # Ensure static/reports directory exists
@@ -44,7 +53,7 @@ class ReportService:
         os.makedirs(static_dir, exist_ok=True)
         filepath = os.path.join(static_dir, filename)
 
-        report = Report(
+        report = model(
             user_id=user_id,
             report_type=report_type,
             format=file_format,
@@ -58,11 +67,11 @@ class ReportService:
 
         try:
             if file_format == "pdf":
-                self._generate_pdf(user_id, report_type, filepath)
+                self._generate_pdf(user_id, report_type, filepath, user.is_demo_mode)
             elif file_format in ["xlsx", "excel"]:
-                self._generate_excel(user_id, report_type, filepath)
+                self._generate_excel(user_id, report_type, filepath, user.is_demo_mode)
             else:
-                self._generate_csv(user_id, report_type, filepath)
+                self._generate_csv(user_id, report_type, filepath, user.is_demo_mode)
 
             # Update size & status
             file_size = os.path.getsize(filepath)
@@ -77,9 +86,13 @@ class ReportService:
         return report
 
     def delete_report(self, user_id: str, report_id: str) -> None:
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return
+        model = DemoReport if user.is_demo_mode else AWSReport
         report = (
-            self.db.query(Report)
-            .filter(Report.id == report_id, Report.user_id == user_id)
+            self.db.query(model)
+            .filter(model.id == report_id, model.user_id == user_id)
             .first()
         )
         if not report:
@@ -94,15 +107,14 @@ class ReportService:
         self.db.delete(report)
         self.db.commit()
 
-    def _generate_csv(self, user_id: str, report_type: str, filepath: str):
+    def _generate_csv(self, user_id: str, report_type: str, filepath: str, is_demo: bool):
         user = self.db.query(User).filter(User.id == user_id).first()
-        is_demo = user.is_demo_mode if user else False
 
         if is_demo:
             records = (
-                self.db.query(CostRecord)
-                .filter(CostRecord.user_id == user_id)
-                .order_by(CostRecord.date.desc())
+                self.db.query(DemoCostRecord)
+                .filter(DemoCostRecord.user_id == user_id)
+                .order_by(DemoCostRecord.date.desc())
                 .limit(1000)
                 .all()
             )
@@ -144,26 +156,25 @@ class ReportService:
                     ]
                 )
 
-    def _generate_pdf(self, user_id: str, report_type: str, filepath: str):
+    def _generate_pdf(self, user_id: str, report_type: str, filepath: str, is_demo: bool):
         user = self.db.query(User).filter(User.id == user_id).first()
-        is_demo = user.is_demo_mode if user else False
 
         if is_demo:
             costs = (
-                self.db.query(CostRecord)
-                .filter(CostRecord.user_id == user_id)
-                .order_by(CostRecord.date.desc())
+                self.db.query(DemoCostRecord)
+                .filter(DemoCostRecord.user_id == user_id)
+                .order_by(DemoCostRecord.date.desc())
                 .all()
             )
             anomalies = (
-                self.db.query(Anomaly)
-                .join(CostRecord, Anomaly.cost_record_id == CostRecord.id)
-                .filter(CostRecord.user_id == user_id)
+                self.db.query(DemoAnomaly)
+                .join(DemoCostRecord, DemoAnomaly.cost_record_id == DemoCostRecord.id)
+                .filter(DemoCostRecord.user_id == user_id)
                 .all()
             )
             recommendations = (
-                self.db.query(Recommendation)
-                .filter(Recommendation.user_id == user_id)
+                self.db.query(DemoRecommendation)
+                .filter(DemoRecommendation.user_id == user_id)
                 .all()
             )
             from app.services.budget_service import BudgetService
@@ -186,7 +197,7 @@ class ReportService:
             
             # Fetch rightsizing recommendations synchronously
             raw_recs = cost_explorer_service.fetch_live_rightsizing_recommendations(aws_account)
-            recommendations = [Recommendation(user_id=user_id, **r) for r in raw_recs]
+            recommendations = [AWSRecommendation(user_id=user_id, **r) for r in raw_recs]
             
             budgets = BudgetService(self.db).get_budgets(user_id)
 
@@ -444,16 +455,15 @@ class ReportService:
 
         doc.build(story)
 
-    def _generate_excel(self, user_id: str, report_type: str, filepath: str):
+    def _generate_excel(self, user_id: str, report_type: str, filepath: str, is_demo: bool):
         """Generate Excel (xlsx) document representation using CSV tab format or openpyxl."""
         user = self.db.query(User).filter(User.id == user_id).first()
-        is_demo = user.is_demo_mode if user else False
 
         if is_demo:
             records = (
-                self.db.query(CostRecord)
-                .filter(CostRecord.user_id == user_id)
-                .order_by(CostRecord.date.desc())
+                self.db.query(DemoCostRecord)
+                .filter(DemoCostRecord.user_id == user_id)
+                .order_by(DemoCostRecord.date.desc())
                 .limit(1000)
                 .all()
             )
@@ -501,4 +511,4 @@ class ReportService:
             wb.save(filepath)
         except ImportError:
             # Fallback to TSV/CSV format if openpyxl is not installed
-            self._generate_csv(user_id, report_type, filepath)
+            self._generate_csv(user_id, report_type, filepath, is_demo)

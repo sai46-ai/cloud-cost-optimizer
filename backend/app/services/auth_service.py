@@ -70,7 +70,7 @@ class AuthService:
         )
         self.user_repo.create(user)
 
-        # Auto-seed financial records for new registration ONLY if user is a reviewer
+        # Auto-seed financial records for new registration
         if user.is_demo_mode:
             try:
                 from seed import seed_user_data
@@ -85,7 +85,8 @@ class AuthService:
         user = self.user_repo.get_by_email(email)
         if not user or not verify_password(password, user.hashed_password):
             raise AuthenticationError("Invalid email or password")
-        if not user.is_active or user.account_status == "disabled":
+        # Treat is_active=None as True (backward-compat with old MongoDB docs)
+        if user.is_active is False or user.account_status == "disabled":
             raise AuthenticationError("Account is disabled")
         
         # Update last login timestamp
@@ -93,16 +94,16 @@ class AuthService:
         user.last_login = datetime.now(timezone.utc)
         self.db.commit()
         
-        # If user is reviewer, ensure demo data is seeded
+        # If user is in demo mode, ensure demo data is seeded
         if user.is_demo_mode:
-            from app.models.cost_record import CostRecord
-            exists = self.db.query(CostRecord).filter_by(user_id=user.id).first()
+            from app.models.cost_record import DemoCostRecord
+            exists = self.db.query(DemoCostRecord).filter_by(user_id=user.id).first()
             if not exists:
                 try:
                     from seed import seed_user_data
                     seed_user_data(user, self.db)
                 except Exception as e:
-                    logger.warning("Failed to auto-seed reviewer user data on login: %s", e)
+                    logger.warning("Failed to auto-seed user data on login: %s", e)
                     
         return self._generate_tokens(user)
 
@@ -117,7 +118,7 @@ class AuthService:
             raise AuthenticationError("Invalid or expired refresh token")
 
         user = self.user_repo.get_by_id(tp.user_id)
-        if not user or not user.is_active or user.account_status == "disabled":
+        if not user or user.is_active is False or user.account_status == "disabled":
             raise AuthenticationError("User not found or disabled")
 
         return self._generate_tokens(user)
@@ -133,7 +134,7 @@ class AuthService:
             raise AuthenticationError("Invalid or expired token")
 
         user = self.user_repo.get_by_id(tp.user_id)
-        if not user or not user.is_active or user.account_status == "disabled":
+        if not user or user.is_active is False or user.account_status == "disabled":
             raise AuthenticationError("User not found or disabled")
         return user
 

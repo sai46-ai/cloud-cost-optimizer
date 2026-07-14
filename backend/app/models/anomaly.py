@@ -36,3 +36,49 @@ class Anomaly(Base):
 
     def __repr__(self) -> str:
         return f"<Anomaly {self.service} {self.severity} ${self.impact_amount:.2f}>"
+
+
+class DemoAnomaly(Base):
+    __tablename__ = "demo_anomalies"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    cost_record_id: Mapped[str] = mapped_column(String(36), ForeignKey("demo_cost_records.id"), nullable=False, index=True)
+    date: Mapped[datetime.date] = mapped_column(Date, index=True, nullable=False)
+    service: Mapped[str] = mapped_column(String(255), nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), default="medium")  # low, medium, high, critical
+    impact_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    root_cause: Mapped[str] = mapped_column(String(1000), nullable=True)
+    detection_method: Mapped[str] = mapped_column(String(50), default="isolation_forest")
+    confidence_score: Mapped[float] = mapped_column(Float, default=0.0)
+    is_resolved: Mapped[bool] = mapped_column(default=False)
+    details: Mapped[str] = mapped_column(String(2000), nullable=True)
+    detected_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    # Relationships
+    cost_record = relationship("DemoCostRecord", back_populates="anomaly", lazy="selectin")
+
+    def __repr__(self) -> str:
+        return f"<DemoAnomaly {self.service} {self.severity} ${self.impact_amount:.2f}>"
+
+
+class AWSAnomaly(Base):
+    __tablename__ = "aws_anomalies"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    cost_record_id: Mapped[str] = mapped_column(String(36), ForeignKey("aws_cost_records.id"), nullable=False, index=True)
+    date: Mapped[datetime.date] = mapped_column(Date, index=True, nullable=False)
+    service: Mapped[str] = mapped_column(String(255), nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), default="medium")  # low, medium, high, critical
+    impact_amount: Mapped[float] = mapped_column(Float, default=0.0)
+    root_cause: Mapped[str] = mapped_column(String(1000), nullable=True)
+    detection_method: Mapped[str] = mapped_column(String(50), default="isolation_forest")
+    confidence_score: Mapped[float] = mapped_column(Float, default=0.0)
+    is_resolved: Mapped[bool] = mapped_column(default=False)
+    details: Mapped[str] = mapped_column(String(2000), nullable=True)
+    detected_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    # Relationships
+    cost_record = relationship("AWSCostRecord", back_populates="anomaly", lazy="selectin")
+
+    def __repr__(self) -> str:
+        return f"<AWSAnomaly {self.service} {self.severity} ${self.impact_amount:.2f}>"

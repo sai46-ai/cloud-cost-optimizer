@@ -23,11 +23,6 @@ export default function Resources() {
   const { user } = useStore();
 
   const loadData = useCallback(async () => {
-    if (user && !user.is_demo_mode && !user.is_aws_connected) {
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setHasAWSError(false);
     try {
@@ -97,9 +92,6 @@ export default function Resources() {
     show: { opacity: 1, y: 0 }
   };
 
-  if (user && !user.is_demo_mode && !user.is_aws_connected) {
-    return <AWSOnboardingState />;
-  }
 
   if (hasAWSError) {
     return <AWSErrorState onRetry={loadData} isLoading={loading} />;

@@ -51,6 +51,79 @@ class CostService:
         self.db = db
         self.cost_repo = CostRepository(db)
 
+    def _get_demo_dashboard_metrics(self, user_id: str, aws_connection_failed: bool = False) -> DashboardMetrics:
+        today = date.today()
+        month_start = today.replace(day=1)
+        prev_month_end = month_start - timedelta(days=1)
+        prev_month_start = prev_month_end.replace(day=1)
+
+        # Current month spend
+        mtd_spend = self.cost_repo.get_total_by_date_range(user_id, month_start, today, is_demo=True)
+        prev_month_spend = self.cost_repo.get_total_by_date_range(
+            user_id, prev_month_start, prev_month_end, is_demo=True
+        )
+
+        # Calculate change percentage
+        change_pct = 0.0
+        if prev_month_spend > 0:
+            change_pct = round(
+                ((mtd_spend - prev_month_spend) / prev_month_spend) * 100, 1
+            )
+
+        # Daily average
+        days_elapsed = max((today - month_start).days, 1)
+        daily_avg = round(mtd_spend / days_elapsed, 2)
+
+        # Forecasted month end
+        days_in_month = 30
+        forecasted = round(daily_avg * days_in_month, 2)
+
+        # Top services and regions
+        top_services = self.cost_repo.get_top_services(
+            user_id, month_start, today, limit=6, is_demo=True
+        )
+        top_regions = self.cost_repo.get_top_regions(
+            user_id, month_start, today, limit=6, is_demo=True
+        )
+
+        # Daily costs for chart
+        thirty_days_ago = today - timedelta(days=30)
+        daily_costs = self.cost_repo.get_daily_totals(user_id, thirty_days_ago, today, is_demo=True)
+        monthly_costs = self.cost_repo.get_monthly_totals(user_id, 12, is_demo=True)
+
+        # Count unresolved anomalies dynamically
+        from app.models.anomaly import DemoAnomaly
+        from app.models.cost_record import DemoCostRecord
+        from sqlalchemy import func
+
+        active_anomalies_count = (
+            self.db.query(func.count(DemoAnomaly.id))
+            .join(DemoCostRecord, DemoAnomaly.cost_record_id == DemoCostRecord.id)
+            .filter(DemoCostRecord.user_id == user_id, DemoAnomaly.is_resolved.is_(False))
+            .scalar()
+        ) or 0
+
+        # Get savings opportunity from recommendations
+        from app.services.recommendation_service import RecommendationService
+        rec_summary = RecommendationService(self.db).get_recommendation_summary(user_id)
+        savings_opportunity = rec_summary.get("total_monthly_savings", 0.0)
+
+        return DashboardMetrics(
+            total_spend_mtd=round(mtd_spend, 2),
+            total_spend_prev_month=round(prev_month_spend, 2),
+            spend_change_pct=change_pct,
+            daily_spend_avg=daily_avg,
+            forecasted_month_end=forecasted,
+            total_savings_opportunity=savings_opportunity,
+            active_anomalies=active_anomalies_count,
+            budget_health_pct=72.5,
+            top_services=[ServiceCost(**s) for s in top_services],
+            top_regions=[RegionCost(**r) for r in top_regions],
+            daily_costs=[CostTrend(**d) for d in daily_costs],
+            monthly_costs=[CostTrend(**m) for m in monthly_costs],
+            aws_connection_failed=aws_connection_failed
+        )
+
     def get_dashboard_metrics(self, user_id: str) -> DashboardMetrics:
         """Get all key metrics for the executive dashboard."""
         user = self.db.query(User).filter(User.id == user_id).first()
@@ -60,118 +133,25 @@ class CostService:
 
         # 1. Reviewer Account (Demo Mode)
         if user.is_demo_mode:
-            today = date.today()
-            month_start = today.replace(day=1)
-            prev_month_end = month_start - timedelta(days=1)
-            prev_month_start = prev_month_end.replace(day=1)
-
-            # Current month spend
-            mtd_spend = self.cost_repo.get_total_by_date_range(user_id, month_start, today)
-            prev_month_spend = self.cost_repo.get_total_by_date_range(
-                user_id, prev_month_start, prev_month_end
-            )
-
-            # Calculate change percentage
-            change_pct = 0.0
-            if prev_month_spend > 0:
-                change_pct = round(
-                    ((mtd_spend - prev_month_spend) / prev_month_spend) * 100, 1
-                )
-
-            # Daily average
-            days_elapsed = max((today - month_start).days, 1)
-            daily_avg = round(mtd_spend / days_elapsed, 2)
-
-            # Forecasted month end
-            days_in_month = 30
-            forecasted = round(daily_avg * days_in_month, 2)
-
-            # Top services and regions
-            top_services = self.cost_repo.get_top_services(
-                user_id, month_start, today, limit=6
-            )
-            top_regions = self.cost_repo.get_top_regions(
-                user_id, month_start, today, limit=6
-            )
-
-            # Daily costs for chart
-            thirty_days_ago = today - timedelta(days=30)
-            daily_costs = self.cost_repo.get_daily_totals(user_id, thirty_days_ago, today)
-            monthly_costs = self.cost_repo.get_monthly_totals(user_id, 12)
-
-            # Count unresolved anomalies dynamically
-            from app.models.anomaly import Anomaly
-            from sqlalchemy import func
-
-            active_anomalies_count = (
-                self.db.query(func.count(Anomaly.id))
-                .join(CostRecord, Anomaly.cost_record_id == CostRecord.id)
-                .filter(CostRecord.user_id == user_id, Anomaly.is_resolved.is_(False))
-                .scalar()
-            )
-
-            # Get savings opportunity from recommendations
-            from app.services.recommendation_service import RecommendationService
-            rec_summary = RecommendationService(self.db).get_recommendation_summary(user_id)
-            savings_opportunity = rec_summary.get("total_monthly_savings", 0.0)
-
-            return DashboardMetrics(
-                total_spend_mtd=round(mtd_spend, 2),
-                total_spend_prev_month=round(prev_month_spend, 2),
-                spend_change_pct=change_pct,
-                daily_spend_avg=daily_avg,
-                forecasted_month_end=forecasted,
-                total_savings_opportunity=savings_opportunity,
-                active_anomalies=active_anomalies_count,
-                budget_health_pct=72.5,
-                top_services=[ServiceCost(**s) for s in top_services],
-                top_regions=[RegionCost(**r) for r in top_regions],
-                daily_costs=[CostTrend(**d) for d in daily_costs],
-                monthly_costs=[CostTrend(**m) for m in monthly_costs],
-                aws_connection_failed=False
-            )
+            return self._get_demo_dashboard_metrics(user_id)
 
         # 2. Normal User
         else:
             if not user.is_aws_connected:
-                # Onboarding state: return empty dashboard metrics immediately without fabricated data.
-                return DashboardMetrics(
-                    total_spend_mtd=0.0,
-                    total_spend_prev_month=0.0,
-                    spend_change_pct=0.0,
-                    daily_spend_avg=0.0,
-                    forecasted_month_end=0.0,
-                    total_savings_opportunity=0.0,
-                    active_anomalies=0,
-                    budget_health_pct=100.0,
-                    top_services=[],
-                    top_regions=[],
-                    daily_costs=[],
-                    monthly_costs=[],
-                    aws_connection_failed=False
-                )
-            
+                # Onboarding state: no AWS connected — serve demo data
+                return self._get_demo_dashboard_metrics(user_id)
+
             # Fetch live AWS metrics
-            aws_account = self.db.query(AWSAccount).filter(AWSAccount.org_id == user.org_id, AWSAccount.is_active.is_(True)).first()
+            aws_account = self.db.query(AWSAccount).filter(
+                AWSAccount.org_id == user.org_id,
+                AWSAccount.is_active.is_(True)
+            ).first()
             if not aws_account:
-                return DashboardMetrics(
-                    total_spend_mtd=0.0,
-                    total_spend_prev_month=0.0,
-                    spend_change_pct=0.0,
-                    daily_spend_avg=0.0,
-                    forecasted_month_end=0.0,
-                    total_savings_opportunity=0.0,
-                    active_anomalies=0,
-                    budget_health_pct=100.0,
-                    top_services=[],
-                    top_regions=[],
-                    daily_costs=[],
-                    monthly_costs=[],
-                    aws_connection_failed=False
-                )
+                return self._get_demo_dashboard_metrics(user_id, aws_connection_failed=True)
 
             from app.services.aws_cost_explorer import cost_explorer_service
             try:
+
                 live_metrics = cost_explorer_service.get_live_dashboard_metrics(aws_account)
 
                 # Get savings opportunity dynamically from live recommendations
@@ -208,17 +188,28 @@ class CostService:
             except Exception as e:
                 import logging
                 logger = logging.getLogger("cloudwise")
-                logger.warning("AWS Cost Explorer metrics fetch failed: %s. Falling back to local database cost data.", e)
+                logger.warning("AWS Cost Explorer metrics fetch failed: %s. Checking local fallback...", e)
 
-                # Fallback to local DB records calculations
+                # Check if there are any local AWSCostRecords for this user
+                from app.models.cost_record import AWSCostRecord as _AWSCostRecord
+                has_local_aws = self.db.query(_AWSCostRecord).filter(
+                    _AWSCostRecord.user_id == user_id
+                ).first() is not None
+
+                if not has_local_aws:
+                    # No local records yet — fall back to demo data with a connection-failed flag
+                    logger.info("No local AWS records found — serving demo data as fallback.")
+                    return self._get_demo_dashboard_metrics(user_id, aws_connection_failed=True)
+
+                # Fallback to local DB AWS records
                 today = date.today()
                 month_start = today.replace(day=1)
                 prev_month_end = month_start - timedelta(days=1)
                 prev_month_start = prev_month_end.replace(day=1)
 
-                mtd_spend = self.cost_repo.get_total_by_date_range(user_id, month_start, today)
+                mtd_spend = self.cost_repo.get_total_by_date_range(user_id, month_start, today, is_demo=False)
                 prev_month_spend = self.cost_repo.get_total_by_date_range(
-                    user_id, prev_month_start, prev_month_end
+                    user_id, prev_month_start, prev_month_end, is_demo=False
                 )
 
                 change_pct = 0.0
@@ -232,19 +223,20 @@ class CostService:
                 days_in_month = 30
                 forecasted = round(daily_avg * days_in_month, 2)
 
-                top_services = self.cost_repo.get_top_services(user_id, month_start, today, limit=6)
-                top_regions = self.cost_repo.get_top_regions(user_id, month_start, today, limit=6)
+                top_services = self.cost_repo.get_top_services(user_id, month_start, today, limit=6, is_demo=False)
+                top_regions = self.cost_repo.get_top_regions(user_id, month_start, today, limit=6, is_demo=False)
 
                 thirty_days_ago = today - timedelta(days=30)
-                daily_costs = self.cost_repo.get_daily_totals(user_id, thirty_days_ago, today)
-                monthly_costs = self.cost_repo.get_monthly_totals(user_id, 12)
+                daily_costs = self.cost_repo.get_daily_totals(user_id, thirty_days_ago, today, is_demo=False)
+                monthly_costs = self.cost_repo.get_monthly_totals(user_id, 12, is_demo=False)
 
-                from app.models.anomaly import Anomaly
+                from app.models.anomaly import AWSAnomaly
+                from app.models.cost_record import AWSCostRecord
                 from sqlalchemy import func
                 active_anomalies_count = (
-                    self.db.query(func.count(Anomaly.id))
-                    .join(CostRecord, Anomaly.cost_record_id == CostRecord.id)
-                    .filter(CostRecord.user_id == user_id, Anomaly.is_resolved.is_(False))
+                    self.db.query(func.count(AWSAnomaly.id))
+                    .join(AWSCostRecord, AWSAnomaly.cost_record_id == AWSCostRecord.id)
+                    .filter(AWSCostRecord.user_id == user_id, AWSAnomaly.is_resolved.is_(False))
                     .scalar()
                 ) or 0
 
@@ -287,10 +279,10 @@ class CostService:
             if not start_date:
                 start_date = end_date - timedelta(days=30)
 
-            by_service = self.cost_repo.get_top_services(user_id, start_date, end_date)
-            by_region = self.cost_repo.get_top_regions(user_id, start_date, end_date)
-            daily_trend = self.cost_repo.get_daily_totals(user_id, start_date, end_date)
-            total = self.cost_repo.get_total_by_date_range(user_id, start_date, end_date)
+            by_service = self.cost_repo.get_top_services(user_id, start_date, end_date, is_demo=True)
+            by_region = self.cost_repo.get_top_regions(user_id, start_date, end_date, is_demo=True)
+            daily_trend = self.cost_repo.get_daily_totals(user_id, start_date, end_date, is_demo=True)
+            total = self.cost_repo.get_total_by_date_range(user_id, start_date, end_date, is_demo=True)
 
             return CostBreakdown(
                 by_service=[ServiceCost(**s) for s in by_service],
@@ -331,10 +323,10 @@ class CostService:
                 logger.warning("AWS Cost Explorer breakdown fetch failed: %s. Falling back to local database cost data.", e)
 
                 # Fallback to local DB records calculations
-                by_service = self.cost_repo.get_top_services(user_id, start_date, end_date)
-                by_region = self.cost_repo.get_top_regions(user_id, start_date, end_date)
-                daily_trend = self.cost_repo.get_daily_totals(user_id, start_date, end_date)
-                total = self.cost_repo.get_total_by_date_range(user_id, start_date, end_date)
+                by_service = self.cost_repo.get_top_services(user_id, start_date, end_date, is_demo=False)
+                by_region = self.cost_repo.get_top_regions(user_id, start_date, end_date, is_demo=False)
+                daily_trend = self.cost_repo.get_daily_totals(user_id, start_date, end_date, is_demo=False)
+                total = self.cost_repo.get_total_by_date_range(user_id, start_date, end_date, is_demo=False)
 
                 return CostBreakdown(
                     by_service=[ServiceCost(**s) for s in by_service],
@@ -365,7 +357,7 @@ class CostService:
                 start_date = end_date - timedelta(days=30)
 
             records = self.cost_repo.get_by_date_range(
-                user_id, start_date, end_date, service
+                user_id, start_date, end_date, service, is_demo=True
             )
             return [
                 {
@@ -404,7 +396,7 @@ class CostService:
                 logger.warning("AWS Cost Explorer raw cost fetch failed: %s. Falling back to local database cost data.", e)
 
                 records = self.cost_repo.get_by_date_range(
-                    user_id, start_date, end_date, service
+                    user_id, start_date, end_date, service, is_demo=False
                 )
                 return [
                     {

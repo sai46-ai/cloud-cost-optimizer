@@ -52,6 +52,21 @@ class User(Base, TimestampMixin):
         lazy="selectin",
     )
 
+    # Isolated Demo and AWS Relationships
+    demo_user = relationship("DemoUser", back_populates="user", uselist=False, cascade="all, delete-orphan", lazy="selectin")
+    demo_cost_records = relationship("DemoCostRecord", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
+    aws_cost_records = relationship("AWSCostRecord", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
+    demo_budgets = relationship("DemoBudget", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
+    aws_budgets = relationship("AWSBudget", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
+    demo_recommendations = relationship("DemoRecommendation", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
+    aws_recommendations = relationship("AWSRecommendation", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
+    demo_forecasts = relationship("DemoForecast", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
+    aws_forecasts = relationship("AWSForecast", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
+    demo_reports = relationship("DemoReport", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
+    aws_reports = relationship("AWSReport", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
+    demo_alerts = relationship("DemoAlert", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
+    aws_alerts = relationship("AWSAlert", back_populates="user", cascade="all, delete-orphan", lazy="selectin")
+
     @property
     def is_demo_mode(self) -> bool:
         # If they connected a real, active AWS account (not a seeded demo one), they are NOT in demo mode
@@ -71,3 +86,20 @@ class User(Base, TimestampMixin):
 
     def __repr__(self) -> str:
         return f"<User {self.email}>"
+
+
+class DemoUser(Base):
+    __tablename__ = "demo_users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False, unique=True)
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(50), default="USER")
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+    # Relationships
+    user = relationship("User", back_populates="demo_user")
+
+    def __repr__(self) -> str:
+        return f"<DemoUser {self.email}>"

@@ -24,11 +24,6 @@ export default function Reports() {
   const { addToast, user } = useStore();
 
   const loadReports = useCallback(async () => {
-    if (user && !user.is_demo_mode && !user.is_aws_connected) {
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setHasAWSError(false);
     try {
@@ -101,9 +96,6 @@ export default function Reports() {
     }
   };
 
-  if (user && !user.is_demo_mode && !user.is_aws_connected) {
-    return <AWSOnboardingState />;
-  }
 
   if (hasAWSError) {
     return <AWSErrorState onRetry={loadReports} isLoading={loading} />;

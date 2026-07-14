@@ -97,8 +97,8 @@ class AWSCostExplorerService:
             from app.core.config import get_settings
             settings = get_settings()
             
-            # If a role_arn is specified, assume the role (bypass for target lab account 810498829595)
-            if aws_account and aws_account.role_arn and "810498829595" not in aws_account.account_id:
+            # If a role_arn is specified, assume the cross-account role
+            if aws_account and aws_account.role_arn:
                 role_arn = aws_account.role_arn
                 credentials = sts_cache.get_credentials(role_arn)
                 

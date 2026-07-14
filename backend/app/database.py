@@ -220,10 +220,22 @@ if is_mongodb:
             if not self.model_class and len(args) == 1 and isinstance(args[0], type):
                 self.model_class = args[0]
                 
+        @staticmethod
+        def _coerce_dates(v):
+            """Recursively convert datetime.date → datetime.datetime for PyMongo."""
+            if isinstance(v, datetime.datetime):
+                return v
+            if isinstance(v, datetime.date):
+                return datetime.datetime.combine(v, datetime.time.min)
+            if isinstance(v, dict):
+                return {sk: MongoQuery._coerce_dates(sv) for sk, sv in v.items()}
+            return v
+
         def filter(self, *conditions):
             for cond in conditions:
                 if isinstance(cond, dict):
                     for k, v in cond.items():
+                        v = MongoQuery._coerce_dates(v)
                         if k in self.filter_dict and isinstance(self.filter_dict[k], dict) and isinstance(v, dict):
                             self.filter_dict[k].update(v)
                         else:
@@ -232,7 +244,7 @@ if is_mongodb:
             
         def filter_by(self, **kwargs):
             for k, v in kwargs.items():
-                self.filter_dict[k] = v
+                self.filter_dict[k] = MongoQuery._coerce_dates(v)
             return self
             
         def order_by(self, *sort_exprs):
@@ -533,6 +545,24 @@ if is_mongodb:
             if obj not in self._pending_adds:
                 self._pending_adds.append(obj)
 
+        def add_all(self, objects):
+            for obj in objects:
+                self.add(obj)
+
+        def bulk_save_objects(self, objects):
+            """Efficiently insert/upsert a list of ORM objects via PyMongo insert_many."""
+            from collections import defaultdict
+            by_table = defaultdict(list)
+            for obj in objects:
+                d = to_dict(obj)
+                by_table[obj.__tablename__].append(d)
+            for tbl, docs in by_table.items():
+                if docs:
+                    # Use ordered=False for max throughput; upsert on 'id' field
+                    from pymongo import UpdateOne
+                    ops = [UpdateOne({"id": d["id"]}, {"$set": d}, upsert=True) for d in docs]
+                    self.db[tbl].bulk_write(ops, ordered=False)
+
         def execute(self, statement, params=None):
             s_str = str(statement).strip().upper()
             if "SELECT 1" in s_str:
@@ -778,6 +808,23 @@ def init_db() -> None:
         db["cost_records"].create_index([("aws_account_id", 1), ("date", 1), ("service", 1)])
         db["anomalies"].create_index("cost_record_id")
         db["budgets"].create_index("user_id")
+
+        # New Demo & AWS Collections
+        db["demo_users"].create_index("user_id", unique=True)
+        db["demo_cost_records"].create_index("user_id")
+        db["aws_cost_records"].create_index("aws_account_id")
+        db["demo_anomalies"].create_index("cost_record_id")
+        db["aws_anomalies"].create_index("cost_record_id")
+        db["demo_budgets"].create_index("user_id")
+        db["aws_budgets"].create_index("user_id")
+        db["demo_recommendations"].create_index("user_id")
+        db["aws_recommendations"].create_index("user_id")
+        db["demo_forecasts"].create_index("user_id")
+        db["aws_forecasts"].create_index("user_id")
+        db["demo_reports"].create_index("user_id")
+        db["aws_reports"].create_index("user_id")
+        db["aws_resources"].create_index("aws_account_id")
+        db["aws_billing"].create_index("aws_account_id")
         return
 
     import app.models

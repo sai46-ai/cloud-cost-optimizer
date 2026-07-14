@@ -6,12 +6,15 @@ Generates optimization recommendations, rightsizing rules, and detects idle clou
 from typing import List, Optional
 from sqlalchemy.orm import Session
 
-from app.models.recommendation import Recommendation
+from app.models.recommendation import Recommendation, DemoRecommendation, AWSRecommendation
 from app.models.user import User
 from app.models.aws_account import AWSAccount
 from app.repositories.base import BaseRepository
 from datetime import datetime, timedelta
 from app.schemas.recommendation import IdleResource, IdleResourceSummary
+import logging
+
+logger = logging.getLogger("cloudwise")
 
 
 class RecommendationService:
@@ -31,15 +34,15 @@ class RecommendationService:
         # 1. Reviewer Account (Demo Mode)
         if user.is_demo_mode:
             recs = (
-                self.db.query(Recommendation)
-                .filter(Recommendation.user_id == user_id)
+                self.db.query(DemoRecommendation)
+                .filter(DemoRecommendation.user_id == user_id)
                 .all()
             )
             if not recs:
                 self._generate_default_recommendations(user_id)
                 recs = (
-                    self.db.query(Recommendation)
-                    .filter(Recommendation.user_id == user_id)
+                    self.db.query(DemoRecommendation)
+                    .filter(DemoRecommendation.user_id == user_id)
                     .all()
                 )
             return recs
@@ -58,7 +61,7 @@ class RecommendationService:
                 recs_objs = []
                 for r in raw_recs:
                     recs_objs.append(
-                        Recommendation(
+                        AWSRecommendation(
                             id=r["resource_id"],
                             user_id=user_id,
                             service=r["service"],
@@ -77,10 +80,10 @@ class RecommendationService:
                     )
                 return recs_objs
             except Exception as e:
-                logger.warning("Failed to fetch live recommendations: %s. Falling back to local demo recommendations.", e)
+                logger.warning("Failed to fetch live recommendations: %s. Falling back to local AWS recommendations.", e)
                 return (
-                    self.db.query(Recommendation)
-                    .filter(Recommendation.user_id == user_id)
+                    self.db.query(AWSRecommendation)
+                    .filter(AWSRecommendation.user_id == user_id)
                     .all()
                 )
 
@@ -99,8 +102,8 @@ class RecommendationService:
         # 1. Reviewer Account (Demo Mode)
         if user.is_demo_mode:
             recs = (
-                self.db.query(Recommendation)
-                .filter(Recommendation.user_id == user_id)
+                self.db.query(DemoRecommendation)
+                .filter(DemoRecommendation.user_id == user_id)
                 .all()
             )
         # 2. Normal User
@@ -127,12 +130,12 @@ class RecommendationService:
             from app.services.aws_cost_explorer import cost_explorer_service
             try:
                 raw_recs = cost_explorer_service.fetch_live_rightsizing_recommendations(aws_account)
-                recs = [Recommendation(user_id=user_id, **r) for r in raw_recs]
+                recs = [AWSRecommendation(user_id=user_id, **r) for r in raw_recs]
             except Exception as e:
-                logger.warning("Failed to fetch live recommendations for summary: %s. Falling back to local demo recommendations.", e)
+                logger.warning("Failed to fetch live recommendations for summary: %s. Falling back to local AWS recommendations.", e)
                 recs = (
-                    self.db.query(Recommendation)
-                    .filter(Recommendation.user_id == user_id)
+                    self.db.query(AWSRecommendation)
+                    .filter(AWSRecommendation.user_id == user_id)
                     .all()
                 )
 
@@ -161,8 +164,14 @@ class RecommendationService:
             "by_status": by_status,
         }
 
-    def update_status(self, rec_id: str, user_id: str, status: str) -> Recommendation:
-        rec = self.rec_repo.get_by_id(rec_id)
+    def update_status(self, rec_id: str, user_id: str, status: str) -> any:
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            from app.core.exceptions import EntityNotFoundError
+            raise EntityNotFoundError("User", user_id)
+
+        model = DemoRecommendation if user.is_demo_mode else AWSRecommendation
+        rec = self.db.query(model).filter(model.id == rec_id).first()
         if not rec:
             from app.core.exceptions import EntityNotFoundError
             raise EntityNotFoundError("Recommendation", rec_id)
@@ -171,7 +180,11 @@ class RecommendationService:
             raise AuthorizationError(
                 "You do not have permission to modify this recommendation"
             )
-        return self.rec_repo.update(rec, {"status": status})
+        
+        rec.status = status
+        self.db.commit()
+        self.db.refresh(rec)
+        return rec
 
     def get_idle_resources(self, user_id: str) -> IdleResourceSummary:
         """Fetch identified idle / underutilized compute, database, and storage assets."""
@@ -285,6 +298,6 @@ class RecommendationService:
             },
         ]
         for d in defaults:
-            rec = Recommendation(**d)
+            rec = DemoRecommendation(**d)
             self.db.add(rec)
         self.db.commit()

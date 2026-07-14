@@ -15,6 +15,7 @@ from app.core.config import get_settings
 from app.services.cost_service import CostService
 from app.models.anomaly import Anomaly
 from app.models.cost_record import CostRecord
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -59,18 +60,50 @@ class AIService:
             "suggestions": self._get_suggestions(message_lower),
         }
 
-    def _get_active_anomalies(self, user_id: Optional[str]) -> list[Anomaly]:
+    def _get_active_anomalies(self, user_id: Optional[str]) -> list[Any]:
         """Fetch unresolved anomalies from the database for the user."""
         if not user_id:
             return []
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return []
+        
         try:
-            return (
-                self.db.query(Anomaly)
-                .join(CostRecord, Anomaly.cost_record_id == CostRecord.id)
-                .filter(CostRecord.user_id == user_id)
-                .filter(Anomaly.is_resolved.is_(False))
-                .all()
-            )
+            if user.is_demo_mode:
+                from app.models.anomaly import DemoAnomaly
+                from app.models.cost_record import DemoCostRecord
+                record_ids = [
+                    r.id for r in
+                    self.db.query(DemoCostRecord)
+                    .filter(DemoCostRecord.user_id == user_id)
+                    .all()
+                ]
+                if not record_ids:
+                    return []
+                return (
+                    self.db.query(DemoAnomaly)
+                    .filter(DemoAnomaly.cost_record_id.in_(record_ids))
+                    .filter(DemoAnomaly.is_resolved.is_(False))
+                    .all()
+                )
+            else:
+                from app.models.anomaly import AWSAnomaly
+                from app.models.cost_record import AWSCostRecord
+                record_ids = [
+                    r.id for r in
+                    self.db.query(AWSCostRecord)
+                    .filter(AWSCostRecord.user_id == user_id)
+                    .all()
+                ]
+                if not record_ids:
+                    return []
+                return (
+                    self.db.query(AWSAnomaly)
+                    .filter(AWSAnomaly.cost_record_id.in_(record_ids))
+                    .filter(AWSAnomaly.is_resolved.is_(False))
+                    .all()
+                )
+
         except Exception as e:
             logger.error(f"Error querying active anomalies for chat: {e}")
             return []

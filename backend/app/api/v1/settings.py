@@ -138,41 +138,39 @@ def update_aws_account(
             detail=f"Role ARN {role_arn} is already connected to another organization."
         )
 
-    # 3. Active AssumeRole policy check via boto3 STS client (unless target lab account 810498829595 or server has no credentials)
-    if "810498829595" not in account_id:
+    # 3. Validate the AssumeRole trust relationship via boto3 STS (skip if server has no AWS credentials)
+    from app.core.config import get_settings as _get_settings
+    _settings = _get_settings()
+    _has_server_creds = bool(_settings.AWS_ACCESS_KEY_ID and _settings.AWS_SECRET_ACCESS_KEY)
+
+    if _has_server_creds:
         try:
             import boto3
             from botocore.exceptions import ClientError, NoCredentialsError
-            from app.core.config import get_settings
-            settings = get_settings()
-            
-            sts_kwargs = {
-                "region_name": settings.AWS_REGION or "us-east-1",
-            }
-            if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
-                sts_kwargs["aws_access_key_id"] = settings.AWS_ACCESS_KEY_ID
-                sts_kwargs["aws_secret_access_key"] = settings.AWS_SECRET_ACCESS_KEY
-                if settings.AWS_SESSION_TOKEN:
-                    sts_kwargs["aws_session_token"] = settings.AWS_SESSION_TOKEN
-            
+
+            sts_kwargs = {"region_name": _settings.AWS_REGION or "us-east-1"}
+            sts_kwargs["aws_access_key_id"] = _settings.AWS_ACCESS_KEY_ID
+            sts_kwargs["aws_secret_access_key"] = _settings.AWS_SECRET_ACCESS_KEY
+            if _settings.AWS_SESSION_TOKEN:
+                sts_kwargs["aws_session_token"] = _settings.AWS_SESSION_TOKEN
+
             sts_client = boto3.client("sts", **sts_kwargs)
             external_id = f"ext-{user.org_id[:8]}"
-            
-            # Attempt to assume role to verify trust relationship is properly set up
+
             sts_client.assume_role(
                 RoleArn=role_arn,
                 RoleSessionName="CloudWiseValidationSession",
                 ExternalId=external_id,
             )
         except NoCredentialsError:
-            logger.warning("AWS IAM validation skipped: server lacks AWS credentials configuration.")
+            logger.warning("AWS STS validation skipped: server has no credentials configured.")
         except ClientError as e:
             err_code = e.response.get("Error", {}).get("Code", "Unknown")
             err_msg = e.response.get("Error", {}).get("Message", str(e))
             logger.error("AWS AssumeRole validation failed: %s - %s", err_code, err_msg)
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"AWS STS AssumeRole check failed: {err_msg} (Code: {err_code}). Please verify your IAM trust relationship and External ID: {external_id}."
+                detail=f"AWS STS AssumeRole check failed: {err_msg} (Code: {err_code}). Verify your IAM trust relationship and External ID: ext-{user.org_id[:8]}."
             )
         except Exception as e:
             logger.error("Unexpected error during AWS role verification: %s", str(e))
@@ -180,6 +178,8 @@ def update_aws_account(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Failed to communicate with AWS STS: {str(e)}"
             )
+    else:
+        logger.info("AWS STS validation skipped: server has no AWS credentials configured. Account will be saved and live data fetched on demand.")
 
     # 4. Atomic database update with rollback
     account = db.query(AWSAccount).filter(AWSAccount.org_id == user.org_id).first()
@@ -199,6 +199,7 @@ def update_aws_account(
     account.role_arn = role_arn
     account.account_name = data.account_name or f"AWS Account {account_id}"
     account.external_id = f"ext-{user.org_id[:8]}"
+    account.is_demo = False  # Mark explicitly as a real (non-demo) account
     if data.region:
         account.region = data.region
     account.is_active = True

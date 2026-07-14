@@ -43,11 +43,6 @@ export default function CostAnalytics() {
   const { theme, addToast, user } = useStore();
 
   const loadData = useCallback(async (startStr?: string, endStr?: string, serviceStr?: string) => {
-    if (user && !user.is_demo_mode && !user.is_aws_connected) {
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setHasAWSError(false);
     try {
@@ -100,9 +95,6 @@ export default function CostAnalytics() {
     }
   };
 
-  if (user && !user.is_demo_mode && !user.is_aws_connected) {
-    return <AWSOnboardingState />;
-  }
 
   if (hasAWSError) {
     return <AWSErrorState onRetry={() => loadData(startDate, endDate, selectedService)} isLoading={loading} />;

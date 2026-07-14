@@ -7,7 +7,7 @@ from app.ai.anomaly_detector import AnomalyDetector
 from app.database import SessionLocal
 from app.models.aws_account import AWSAccount
 from app.models.user import User
-from app.models.cost_record import CostRecord
+from app.models.cost_record import AWSCostRecord
 
 
 @celery_app.task(bind=True, max_retries=3)
@@ -53,17 +53,17 @@ def fetch_and_store_aws_costs(self):
 
                 for c in costs:
                     # Check if record already exists to prevent duplicate entries
-                    existing = db.query(CostRecord).filter(
-                        CostRecord.aws_account_id == acc.id,
-                        CostRecord.date == c["date"],
-                        CostRecord.service == c["service"]
+                    existing = db.query(AWSCostRecord).filter(
+                        AWSCostRecord.aws_account_id == acc.id,
+                        AWSCostRecord.date == c["date"],
+                        AWSCostRecord.service == c["service"]
                     ).first()
                     
                     if existing:
                         existing.amount = c["amount"]
                         existing.usage_quantity = c["usage"]
                     else:
-                        cr = CostRecord(
+                        cr = AWSCostRecord(
                             aws_account_id=acc.id,
                             user_id=primary_user_id,
                             date=c["date"],

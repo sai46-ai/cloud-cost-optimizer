@@ -1,53 +1,66 @@
-"""
-Budget Service
-CRUD operations and alert management for budgets.
-"""
-
-from typing import List
+from typing import List, Any
 from sqlalchemy.orm import Session
 
-from app.models.budget import Budget
+from app.models.budget import Budget, DemoBudget, AWSBudget
 from app.models.user import User
 from app.models.aws_account import AWSAccount
-from app.repositories.budget_repository import BudgetRepository
 from app.core.exceptions import EntityNotFoundError
 
 
 class BudgetService:
     def __init__(self, db: Session):
         self.db = db
-        self.budget_repo = BudgetRepository(db)
 
-    def create_budget(self, user_id: str, data: dict) -> Budget:
-        budget = Budget(user_id=user_id, **data)
-        created = self.budget_repo.create(budget)
-        created.spent = self._calculate_budget_spent(user_id, created)
-        return created
-
-    def get_budgets(self, user_id: str) -> List[Budget]:
-        budgets = self.budget_repo.get_by_user(user_id)
-        for b in budgets:
-            b.spent = self._calculate_budget_spent(user_id, b)
-        return budgets
-
-    def get_budget(self, user_id: str, budget_id: str) -> Budget:
-        budget = self.budget_repo.get_by_id(budget_id)
-        if not budget or budget.user_id != user_id:
-            raise EntityNotFoundError("Budget", budget_id)
-        budget.spent = self._calculate_budget_spent(user_id, budget)
+    def create_budget(self, user_id: str, data: dict) -> Any:
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise EntityNotFoundError("User", user_id)
+        model = DemoBudget if user.is_demo_mode else AWSBudget
+        budget = model(user_id=user_id, **data)
+        self.db.add(budget)
+        self.db.commit()
+        self.db.refresh(budget)
+        budget.spent = self._calculate_budget_spent(user_id, budget, user.is_demo_mode)
         return budget
 
-    def update_budget(self, user_id: str, budget_id: str, data: dict) -> Budget:
+    def get_budgets(self, user_id: str) -> List[Any]:
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return []
+        model = DemoBudget if user.is_demo_mode else AWSBudget
+        budgets = self.db.query(model).filter(model.user_id == user_id).all()
+        for b in budgets:
+            b.spent = self._calculate_budget_spent(user_id, b, user.is_demo_mode)
+        return budgets
+
+    def get_budget(self, user_id: str, budget_id: str) -> Any:
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise EntityNotFoundError("User", user_id)
+        model = DemoBudget if user.is_demo_mode else AWSBudget
+        budget = self.db.query(model).filter(model.id == budget_id).first()
+        if not budget or budget.user_id != user_id:
+            raise EntityNotFoundError("Budget", budget_id)
+        budget.spent = self._calculate_budget_spent(user_id, budget, user.is_demo_mode)
+        return budget
+
+    def update_budget(self, user_id: str, budget_id: str, data: dict) -> Any:
         budget = self.get_budget(user_id, budget_id)
-        updated = self.budget_repo.update(budget, data)
-        updated.spent = self._calculate_budget_spent(user_id, updated)
-        return updated
+        for key, value in data.items():
+            if value is not None and hasattr(budget, key):
+                setattr(budget, key, value)
+        self.db.commit()
+        self.db.refresh(budget)
+        user = self.db.query(User).filter(User.id == user_id).first()
+        budget.spent = self._calculate_budget_spent(user_id, budget, user.is_demo_mode)
+        return budget
 
     def delete_budget(self, user_id: str, budget_id: str) -> None:
         budget = self.get_budget(user_id, budget_id)
-        self.budget_repo.delete(budget)
+        self.db.delete(budget)
+        self.db.commit()
 
-    def _calculate_budget_spent(self, user_id: str, budget: Budget) -> float:
+    def _calculate_budget_spent(self, user_id: str, budget: Any, is_demo: bool) -> float:
         from datetime import date, timedelta
 
         today = date.today()
@@ -85,18 +98,18 @@ class BudgetService:
         if not user:
             return 0.0
 
-        # If user is a reviewer (demo mode), query the DB cost records
-        if user.is_demo_mode:
-            from app.models.cost_record import CostRecord
+        # If user is in demo mode, query the DB cost records
+        if is_demo:
+            from app.models.cost_record import DemoCostRecord
             from sqlalchemy import func
 
-            query = self.db.query(func.sum(CostRecord.amount)).filter(
-                CostRecord.user_id == user_id,
-                CostRecord.date >= start_date,
-                CostRecord.date <= end_date,
+            query = self.db.query(func.sum(DemoCostRecord.amount)).filter(
+                DemoCostRecord.user_id == user_id,
+                DemoCostRecord.date >= start_date,
+                DemoCostRecord.date <= end_date,
             )
             if service_filter:
-                query = query.filter(CostRecord.service == service_filter)
+                query = query.filter(DemoCostRecord.service == service_filter)
 
             result = query.scalar()
             return round(result or 0.0, 2)
@@ -114,5 +127,5 @@ class BudgetService:
             try:
                 return cost_explorer_service.get_live_spent(aws_account, start_date, end_date, service_filter)
             except Exception:
-                # If query fails, let's return 0.0 to avoid breaking user budgets loading, or propagate the error
+                # If query fails, let's return 0.0
                 return 0.0

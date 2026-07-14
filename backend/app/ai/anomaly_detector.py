@@ -18,8 +18,8 @@ except ImportError:
 # pyrefly: ignore [missing-import]
 from sqlalchemy.orm import Session
 
-from app.models.cost_record import CostRecord
-from app.models.anomaly import Anomaly
+from app.models.cost_record import CostRecord, DemoCostRecord, AWSCostRecord
+from app.models.anomaly import Anomaly, DemoAnomaly, AWSAnomaly
 from app.models.user import User
 from app.models.aws_account import AWSAccount
 
@@ -32,7 +32,7 @@ class AnomalyDetector:
     def __init__(self, db: Session):
         self.db = db
 
-    def _run_detection_on_records(self, records, contamination: float = 0.08) -> List[Anomaly]:
+    def _run_detection_on_records(self, records, contamination: float = 0.08, is_demo: bool = True) -> List[Any]:
         if not ML_AVAILABLE or len(records) < 14:
             return []
 
@@ -50,6 +50,7 @@ class AnomalyDetector:
         )
 
         detected_anomalies = []
+        anomaly_cls = DemoAnomaly if is_demo else AWSAnomaly
         for service in df["service"].unique():
             sdf = df[df["service"] == service].copy()
             if len(sdf) < 10:
@@ -91,7 +92,7 @@ class AnomalyDetector:
                 impact = round(abs(row["amount"] - mean_cost), 2)
                 root_cause = self._determine_root_cause(row, sdf)
 
-                anomaly = Anomaly(
+                anomaly = anomaly_cls(
                     cost_record_id=str(row["id"]),
                     date=row["date"] if isinstance(row["date"], date) else datetime.strptime(str(row["date"]), "%Y-%m-%d").date(),
                     service=service,
@@ -110,7 +111,7 @@ class AnomalyDetector:
 
     def detect_anomalies(
         self, user_id: str, contamination: float = 0.08
-    ) -> List[Anomaly]:
+    ) -> List[Any]:
         """Run anomaly detection dynamically based on user type."""
         from datetime import timedelta
         user = self.db.query(User).filter(User.id == user_id).first()
@@ -120,14 +121,14 @@ class AnomalyDetector:
         # 1. Reviewer Account (Demo Mode)
         if user.is_demo_mode:
             records = (
-                self.db.query(CostRecord)
-                .filter(CostRecord.user_id == user_id)
-                .order_by(CostRecord.date)
+                self.db.query(DemoCostRecord)
+                .filter(DemoCostRecord.user_id == user_id)
+                .order_by(DemoCostRecord.date)
                 .all()
             )
-            anomalies = self._run_detection_on_records(records, contamination)
+            anomalies = self._run_detection_on_records(records, contamination, is_demo=True)
             for a in anomalies:
-                exists = self.db.query(Anomaly).filter_by(cost_record_id=a.cost_record_id).first()
+                exists = self.db.query(DemoAnomaly).filter_by(cost_record_id=a.cost_record_id).first()
                 if not exists:
                     self.db.add(a)
             self.db.commit()
@@ -146,28 +147,36 @@ class AnomalyDetector:
             from app.services.aws_cost_explorer import cost_explorer_service
             try:
                 records = cost_explorer_service.get_live_costs(aws_account, start_date, today)
-                return self._run_detection_on_records(records, contamination)
+                return self._run_detection_on_records(records, contamination, is_demo=False)
             except Exception as e:
-                logger.warning("Failed to fetch live costs for anomaly detection: %s. Falling back to local demo records.", e)
+                logger.warning("Failed to fetch live costs for anomaly detection: %s. Falling back to local AWS records.", e)
                 records = (
-                    self.db.query(CostRecord)
-                    .filter(CostRecord.user_id == user_id)
-                    .order_by(CostRecord.date)
+                    self.db.query(AWSCostRecord)
+                    .filter(AWSCostRecord.user_id == user_id)
+                    .order_by(AWSCostRecord.date)
                     .all()
                 )
-                return self._run_detection_on_records(records, contamination)
+                return self._run_detection_on_records(records, contamination, is_demo=False)
 
-    def get_anomalies(self, user_id: str, limit: int = 50) -> List[Anomaly]:
+    def get_anomalies(self, user_id: str, limit: int = 50) -> List[Any]:
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
             return []
 
         if user.is_demo_mode:
+            # Get user's cost record IDs first (avoids relying on JOIN in MongoDB shim)
+            record_ids = [
+                r.id for r in
+                self.db.query(DemoCostRecord)
+                .filter(DemoCostRecord.user_id == user_id)
+                .all()
+            ]
+            if not record_ids:
+                return []
             return (
-                self.db.query(Anomaly)
-                .join(CostRecord, Anomaly.cost_record_id == CostRecord.id)
-                .filter(CostRecord.user_id == user_id)
-                .order_by(Anomaly.detected_at.desc())
+                self.db.query(DemoAnomaly)
+                .filter(DemoAnomaly.cost_record_id.in_(record_ids))
+                .order_by(DemoAnomaly.detected_at.desc())
                 .limit(limit)
                 .all()
             )

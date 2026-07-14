@@ -14,18 +14,19 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from app.database import Base, engine, SessionLocal, init_db
 from app.models.organization import Organization
-from app.models.user import User
-from app.models.aws_account import AWSAccount
-from app.models.cost_record import CostRecord
-from app.models.budget import Budget
-from app.models.anomaly import Anomaly
-from app.models.recommendation import Recommendation
-from app.models.forecast import Forecast
+from app.models.user import User, DemoUser
+from app.models.aws_account import AWSAccount, DemoAlert, AWSAlert
+from app.models.cost_record import CostRecord, DemoCostRecord, AWSCostRecord
+from app.models.budget import Budget, DemoBudget, AWSBudget
+from app.models.anomaly import Anomaly, DemoAnomaly, AWSAnomaly
+from app.models.recommendation import Recommendation, DemoRecommendation, AWSRecommendation
+from app.models.forecast import Forecast, DemoForecast, AWSForecast
+from app.models.report import Report, DemoReport, AWSReport
 from app.models.settings import UserSettings
 
 
 def seed_user_data(user, db):
-    """Seed financial records, anomalies, budgets, and recommendations for a user."""
+    """Seed financial records, anomalies, budgets, and recommendations for a user in Demo tables."""
     # 1. Ensure user has organization
     org = user.organization
     if not org:
@@ -52,58 +53,38 @@ def seed_user_data(user, db):
         db.add(settings)
         db.commit()
 
-    # 3. Create or reuse AWS Account for user's organization
-    account = db.query(AWSAccount).filter_by(org_id=org.id).first()
-    if not account:
-        # Generate a unique 12-digit account ID for this user's organization
-        # We use digits from the user ID to ensure uniqueness, fallback to random
-        import random
-        digits = "".join(c for c in user.id if c.isdigit())
-        if len(digits) < 12:
-            digits += "".join(str(random.randint(0, 9)) for _ in range(12 - len(digits)))
-        account_id = digits[:12]
-        
-        # Check if this account_id exists (highly unlikely due to uuid generation)
-        existing_account = db.query(AWSAccount).filter_by(account_id=account_id).first()
-        while existing_account:
-            account_id = "".join(str(random.randint(0, 9)) for _ in range(12))
-            existing_account = db.query(AWSAccount).filter_by(account_id=account_id).first()
-            
-        account = AWSAccount(
-            org_id=org.id,
-            account_id=account_id,
-            account_name="Production Root",
-            role_arn=f"arn:aws:iam::{account_id}:role/CloudWiseReadOnlyRole",
-            external_id=f"ext-{user.id[:8]}",
-            region="us-east-1",
-            is_active=True,
-            is_demo=True
+    # 3. Ensure DemoUser
+    demo_user = db.query(DemoUser).filter_by(user_id=user.id).first()
+    if not demo_user:
+        demo_user = DemoUser(
+            user_id=user.id,
+            full_name=user.full_name,
+            email=user.email,
+            role=user.role,
+            is_active=True
         )
-        db.add(account)
+        db.add(demo_user)
         db.commit()
-        db.refresh(account)
 
-    # Check if user already has cost records
-    existing_records = db.query(CostRecord).filter_by(user_id=user.id).count()
+    # Check if user already has demo cost records
+    existing_records = db.query(DemoCostRecord).filter_by(user_id=user.id).count()
     if existing_records > 0:
-        print(f"[INFO] User {user.email} already has {existing_records} cost records.")
+        print(f"[INFO] User {user.email} already has {existing_records} demo cost records.")
         return
 
-    print(f"[PROCESS] Generating 90 days of cost records for {user.email}...")
+    print(f"[PROCESS] Generating 90 days of deterministic demo cost records for {user.email}...")
     today = date.today()
     start_date = today - timedelta(days=90)
 
     # Baseline cost profiles
     services = [
-        {"name": "Amazon EC2", "base": 80.0, "var": 10.0, "region": "us-east-1"},
-        {"name": "Amazon RDS", "base": 40.0, "var": 2.0, "region": "us-east-1"},
-        {"name": "Amazon S3", "base": 15.0, "var": 0.5, "region": "us-west-2"},
-        {"name": "AWS Lambda", "base": 10.0, "var": 3.0, "region": "eu-west-1"},
-        {"name": "Amazon CloudFront", "base": 8.0, "var": 1.5, "region": "us-east-1"},
-        {"name": "Amazon DynamoDB", "base": 6.0, "var": 0.5, "region": "ap-southeast-1"}
+        {"name": "Amazon EC2", "base": 80.0, "region": "us-east-1"},
+        {"name": "Amazon RDS", "base": 40.0, "region": "us-east-1"},
+        {"name": "Amazon S3", "base": 15.0, "region": "us-west-2"},
+        {"name": "AWS Lambda", "base": 10.0, "region": "eu-west-1"},
+        {"name": "Amazon CloudFront", "base": 8.0, "region": "us-east-1"},
+        {"name": "Amazon DynamoDB", "base": 6.0, "region": "ap-southeast-1"}
     ]
-
-    random.seed(42)  # For deterministic baseline generation
 
     cost_records = []
     current_date = start_date
@@ -115,23 +96,19 @@ def seed_user_data(user, db):
             if svc["name"] == "Amazon EC2" and current_date == (today - timedelta(days=12)):
                 spike = 650.0
 
-            amount = (svc["base"] + random.uniform(-svc["var"], svc["var"])) * day_factor + spike
-            amount = round(amount, 2)
-            usage = round(amount * random.uniform(0.9, 1.1), 2)
+            amount = round(svc["base"] * day_factor + spike, 2)
+            usage = round(amount * 1.05, 2)
 
-            cr = CostRecord(
-                aws_account_id=account.id,
+            cr = DemoCostRecord(
                 user_id=user.id,
                 date=current_date,
-                service=svc["region"],
+                service=svc["name"],
                 region=svc["region"],
                 amount=amount,
                 usage_quantity=usage,
                 granularity="DAILY",
                 ingested_at=datetime.now(timezone.utc) - timedelta(days=(today - current_date).days)
             )
-            # Correct service name attribute
-            cr.service = svc["name"]
             cost_records.append(cr)
 
         current_date += timedelta(days=1)
@@ -142,17 +119,17 @@ def seed_user_data(user, db):
     # Find the EC2 spike record to link the anomaly
     spike_date = today - timedelta(days=12)
     ec2_spike_record = (
-        db.query(CostRecord)
+        db.query(DemoCostRecord)
         .filter(
-            CostRecord.user_id == user.id,
-            CostRecord.service == "Amazon EC2",
-            CostRecord.date == spike_date
+            DemoCostRecord.user_id == user.id,
+            DemoCostRecord.service == "Amazon EC2",
+            DemoCostRecord.date == spike_date
         )
         .first()
     )
 
     if ec2_spike_record:
-        anomaly1 = Anomaly(
+        anomaly1 = DemoAnomaly(
             cost_record_id=ec2_spike_record.id,
             date=spike_date,
             service="Amazon EC2",
@@ -163,9 +140,9 @@ def seed_user_data(user, db):
             confidence_score=0.98,
             is_resolved=False,
             details=json.dumps({
-                "expected_cost": 85.0,
-                "actual_cost": 735.0,
-                "spike_ratio": 8.6,
+                "expected_cost": 80.0,
+                "actual_cost": 730.0,
+                "spike_ratio": 9.1,
                 "region": "us-east-1"
             }),
             detected_at=datetime.now(timezone.utc) - timedelta(days=12)
@@ -217,7 +194,7 @@ def seed_user_data(user, db):
     ]
 
     for b_data in budgets_data:
-        budget = Budget(user_id=user.id, **b_data)
+        budget = DemoBudget(user_id=user.id, **b_data)
         db.add(budget)
     db.commit()
 
@@ -268,7 +245,7 @@ def seed_user_data(user, db):
     ]
 
     for r_data in recs_data:
-        rec = Recommendation(user_id=user.id, **r_data)
+        rec = DemoRecommendation(user_id=user.id, **r_data)
         db.add(rec)
     db.commit()
 
@@ -313,10 +290,35 @@ def seed_user_data(user, db):
     ]
 
     for f_data in forecasts_data:
-        f = Forecast(user_id=user.id, **f_data)
+        f = DemoForecast(user_id=user.id, **f_data)
         db.add(f)
     db.commit()
-    print(f"[SUCCESS] Financial & FinOps data initialized for {user.email}")
+
+    # Seed Reports
+    demo_report = DemoReport(
+        user_id=user.id,
+        report_type="cost_summary",
+        format="pdf",
+        filename="cloudwise_monthly_cost_summary.pdf",
+        file_size=102450.0,
+        status="completed",
+        generated_at=datetime.now(timezone.utc) - timedelta(days=2)
+    )
+    db.add(demo_report)
+    db.commit()
+
+    # Seed DemoAlerts
+    demo_alert = DemoAlert(
+        user_id=user.id,
+        alert_type="budget",
+        title="Budget Alert: Staging & Dev Testbed",
+        message="Staging & Dev Testbed has exceeded 50% utilization limit.",
+        is_read=False
+    )
+    db.add(demo_alert)
+    db.commit()
+
+    print(f"[SUCCESS] Isolated Demo financial & FinOps data initialized for {user.email}")
 
 
 def seed_database():

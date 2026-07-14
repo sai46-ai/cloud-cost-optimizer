@@ -17,8 +17,8 @@ except ImportError:
     ML_AVAILABLE = False
 from sqlalchemy.orm import Session
 
-from app.models.cost_record import CostRecord
-from app.models.forecast import Forecast
+from app.models.cost_record import CostRecord, DemoCostRecord, AWSCostRecord
+from app.models.forecast import Forecast, DemoForecast, AWSForecast
 from app.models.user import User
 from app.models.aws_account import AWSAccount
 
@@ -31,7 +31,7 @@ class CostForecaster:
     def __init__(self, db: Session):
         self.db = db
 
-    def generate_forecasts(self, user_id: str) -> List[Forecast]:
+    def generate_forecasts(self, user_id: str) -> List[Any]:
         """Generate forecasts for multiple time horizons."""
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
@@ -40,11 +40,12 @@ class CostForecaster:
         # Get records based on user type
         if user.is_demo_mode:
             records = (
-                self.db.query(CostRecord)
-                .filter(CostRecord.user_id == user_id)
-                .order_by(CostRecord.date)
+                self.db.query(DemoCostRecord)
+                .filter(DemoCostRecord.user_id == user_id)
+                .order_by(DemoCostRecord.date)
                 .all()
             )
+            forecast_cls = DemoForecast
         else:
             if not user.is_aws_connected:
                 return []
@@ -58,13 +59,14 @@ class CostForecaster:
             try:
                 records = cost_explorer_service.get_live_costs(aws_account, start_date, today)
             except Exception as e:
-                logger.warning("Failed to fetch live costs for forecasting: %s. Falling back to local demo records.", e)
+                logger.warning("Failed to fetch live costs for forecasting: %s. Falling back to local AWS records.", e)
                 records = (
-                    self.db.query(CostRecord)
-                    .filter(CostRecord.user_id == user_id)
-                    .order_by(CostRecord.date)
+                    self.db.query(AWSCostRecord)
+                    .filter(AWSCostRecord.user_id == user_id)
+                    .order_by(AWSCostRecord.date)
                     .all()
                 )
+            forecast_cls = AWSForecast
 
         if not ML_AVAILABLE or len(records) < 14:
             logger.warning(
@@ -92,7 +94,7 @@ class CostForecaster:
             ("quarter", 90, "Next Quarter"),
         ]:
             pred, lower, upper = self._forecast_statistical(daily, days_ahead)
-            forecast = Forecast(
+            forecast = forecast_cls(
                 user_id=user_id,
                 horizon=horizon,
                 forecast_date=date.today() + timedelta(days=days_ahead),
@@ -126,9 +128,9 @@ class CostForecaster:
             result = {}
             for h in horizons:
                 forecast = (
-                    self.db.query(Forecast)
-                    .filter(Forecast.user_id == user_id, Forecast.horizon == h)
-                    .order_by(Forecast.generated_at.desc())
+                    self.db.query(DemoForecast)
+                    .filter(DemoForecast.user_id == user_id, DemoForecast.horizon == h)
+                    .order_by(DemoForecast.generated_at.desc())
                     .first()
                 )
                 if forecast:

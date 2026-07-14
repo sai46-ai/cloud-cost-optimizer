@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from sqlalchemy import func, desc
 from sqlalchemy.orm import Session
 
-from app.models.cost_record import CostRecord
+from app.models.cost_record import CostRecord, DemoCostRecord, AWSCostRecord
 from app.repositories.base import BaseRepository
 
 
@@ -19,60 +19,65 @@ class CostRepository(BaseRepository[CostRecord]):
         start_date: date,
         end_date: date,
         service: Optional[str] = None,
+        is_demo: bool = True,
     ) -> List[CostRecord]:
-        query = self.db.query(CostRecord).filter(
-            CostRecord.user_id == user_id,
-            CostRecord.date >= start_date,
-            CostRecord.date <= end_date,
+        model = DemoCostRecord if is_demo else AWSCostRecord
+        query = self.db.query(model).filter(
+            model.user_id == user_id,
+            model.date >= start_date,
+            model.date <= end_date,
         )
         if service:
-            query = query.filter(CostRecord.service == service)
-        return query.order_by(CostRecord.date).all()
+            query = query.filter(model.service == service)
+        return query.order_by(model.date).all()
 
     def get_total_by_date_range(
-        self, user_id: str, start_date: date, end_date: date
+        self, user_id: str, start_date: date, end_date: date, is_demo: bool = True
     ) -> float:
+        model = DemoCostRecord if is_demo else AWSCostRecord
         result = (
-            self.db.query(func.sum(CostRecord.amount))
+            self.db.query(func.sum(model.amount))
             .filter(
-                CostRecord.user_id == user_id,
-                CostRecord.date >= start_date,
-                CostRecord.date <= end_date,
+                model.user_id == user_id,
+                model.date >= start_date,
+                model.date <= end_date,
             )
             .scalar()
         )
         return result or 0.0
 
     def get_daily_totals(
-        self, user_id: str, start_date: date, end_date: date
+        self, user_id: str, start_date: date, end_date: date, is_demo: bool = True
     ) -> List[dict]:
+        model = DemoCostRecord if is_demo else AWSCostRecord
         results = (
-            self.db.query(CostRecord.date, func.sum(CostRecord.amount).label("total"))
+            self.db.query(model.date, func.sum(model.amount).label("total"))
             .filter(
-                CostRecord.user_id == user_id,
-                CostRecord.date >= start_date,
-                CostRecord.date <= end_date,
+                model.user_id == user_id,
+                model.date >= start_date,
+                model.date <= end_date,
             )
-            .group_by(CostRecord.date)
-            .order_by(CostRecord.date)
+            .group_by(model.date)
+            .order_by(model.date)
             .all()
         )
         return [{"date": str(r.date), "amount": round(r.total, 2)} for r in results]
 
     def get_top_services(
-        self, user_id: str, start_date: date, end_date: date, limit: int = 10
+        self, user_id: str, start_date: date, end_date: date, limit: int = 10, is_demo: bool = True
     ) -> List[dict]:
+        model = DemoCostRecord if is_demo else AWSCostRecord
         results = (
             self.db.query(
-                CostRecord.service,
-                func.sum(CostRecord.amount).label("total"),
+                model.service,
+                func.sum(model.amount).label("total"),
             )
             .filter(
-                CostRecord.user_id == user_id,
-                CostRecord.date >= start_date,
-                CostRecord.date <= end_date,
+                model.user_id == user_id,
+                model.date >= start_date,
+                model.date <= end_date,
             )
-            .group_by(CostRecord.service)
+            .group_by(model.service)
             .order_by(desc("total"))
             .limit(limit)
             .all()
@@ -88,19 +93,20 @@ class CostRepository(BaseRepository[CostRecord]):
         ]
 
     def get_top_regions(
-        self, user_id: str, start_date: date, end_date: date, limit: int = 10
+        self, user_id: str, start_date: date, end_date: date, limit: int = 10, is_demo: bool = True
     ) -> List[dict]:
+        model = DemoCostRecord if is_demo else AWSCostRecord
         results = (
             self.db.query(
-                CostRecord.region,
-                func.sum(CostRecord.amount).label("total"),
+                model.region,
+                func.sum(model.amount).label("total"),
             )
             .filter(
-                CostRecord.user_id == user_id,
-                CostRecord.date >= start_date,
-                CostRecord.date <= end_date,
+                model.user_id == user_id,
+                model.date >= start_date,
+                model.date <= end_date,
             )
-            .group_by(CostRecord.region)
+            .group_by(model.region)
             .order_by(desc("total"))
             .limit(limit)
             .all()
@@ -115,18 +121,28 @@ class CostRepository(BaseRepository[CostRecord]):
             for r in results
         ]
 
-    def get_monthly_totals(self, user_id: str, months: int = 12) -> List[dict]:
-        """Get monthly cost totals for the last N months."""
+    def get_monthly_totals(self, user_id: str, months: int = 12, is_demo: bool = True) -> List[dict]:
+        """Get monthly cost totals for the last N months (database-agnostic).
+
+        Uses full-model query + Python-side grouping instead of func.strftime,
+        which is SQLite-only and breaks on MongoDB.
+        """
+        model = DemoCostRecord if is_demo else AWSCostRecord
         end = date.today()
         start = end - timedelta(days=months * 31)
+        # Query full objects — works correctly with both SQLite and MongoDB shim
         results = (
-            self.db.query(
-                func.strftime("%Y-%m", CostRecord.date).label("month"),
-                func.sum(CostRecord.amount).label("total"),
-            )
-            .filter(CostRecord.user_id == user_id, CostRecord.date >= start)
-            .group_by("month")
-            .order_by("month")
+            self.db.query(model)
+            .filter(model.user_id == user_id, model.date >= start)
             .all()
         )
-        return [{"date": r.month, "amount": round(r.total, 2)} for r in results]
+        # Group by YYYY-MM in Python
+        monthly: dict = {}
+        for r in results:
+            d = getattr(r, "date", None)
+            amt = getattr(r, "amount", 0.0) or 0.0
+            if d is None:
+                continue
+            key = d.strftime("%Y-%m") if hasattr(d, "strftime") else str(d)[:7]
+            monthly[key] = round(monthly.get(key, 0.0) + amt, 2)
+        return [{"date": k, "amount": v} for k, v in sorted(monthly.items())]
