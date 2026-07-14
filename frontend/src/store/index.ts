@@ -27,6 +27,9 @@ interface AppState {
   user: User | null;
   setUser: (user: User | null) => void;
   
+  awsConnectionFailed: boolean;
+  setAwsConnectionFailed: (status: boolean) => void;
+  
   isAuthenticated: boolean;
   setAuthenticated: (status: boolean) => void;
   
@@ -54,6 +57,9 @@ const useStore = create<AppState>()(
       
       user: null,
       setUser: (user) => set({ user }),
+      
+      awsConnectionFailed: false,
+      setAwsConnectionFailed: (status) => set({ awsConnectionFailed: status }),
       
       isAuthenticated: false,
       setAuthenticated: (status) => set({ isAuthenticated: status }),

@@ -30,6 +30,13 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     window.dispatchEvent(new CustomEvent('api-online'));
+    
+    if (response && response.data && typeof response.data === 'object') {
+      if ('aws_connection_failed' in response.data) {
+        useStore.getState().setAwsConnectionFailed(response.data.aws_connection_failed);
+      }
+    }
+    
     return response;
   },
   async (error) => {

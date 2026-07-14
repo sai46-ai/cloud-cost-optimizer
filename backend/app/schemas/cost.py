@@ -60,6 +60,7 @@ class DashboardMetrics(BaseModel):
     top_regions: List[RegionCost]
     daily_costs: List[CostTrend]
     monthly_costs: List[CostTrend]
+    aws_connection_failed: bool = False
 
 
 class CostBreakdown(BaseModel):
@@ -67,3 +68,4 @@ class CostBreakdown(BaseModel):
     by_region: List[RegionCost]
     daily_trend: List[CostTrend]
     total: float
+    aws_connection_failed: bool = False

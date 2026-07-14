@@ -40,3 +40,4 @@ class AWSAccountResponse(BaseModel):
     external_id: str | None = None
     region: str
     is_active: bool
+    is_demo: bool = False

@@ -55,7 +55,16 @@ class CostForecaster:
             today = date.today()
             start_date = today - timedelta(days=90)
             from app.services.aws_cost_explorer import cost_explorer_service
-            records = cost_explorer_service.get_live_costs(aws_account, start_date, today)
+            try:
+                records = cost_explorer_service.get_live_costs(aws_account, start_date, today)
+            except Exception as e:
+                logger.warning("Failed to fetch live costs for forecasting: %s. Falling back to local demo records.", e)
+                records = (
+                    self.db.query(CostRecord)
+                    .filter(CostRecord.user_id == user_id)
+                    .order_by(CostRecord.date)
+                    .all()
+                )
 
         if not ML_AVAILABLE or len(records) < 14:
             logger.warning(

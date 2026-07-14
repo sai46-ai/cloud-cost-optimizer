@@ -53,29 +53,36 @@ class RecommendationService:
                 return []
 
             from app.services.aws_cost_explorer import cost_explorer_service
-            raw_recs = cost_explorer_service.fetch_live_rightsizing_recommendations(aws_account)
-            
-            recs_objs = []
-            for r in raw_recs:
-                recs_objs.append(
-                    Recommendation(
-                        id=r["resource_id"],
-                        user_id=user_id,
-                        service=r["service"],
-                        resource_id=r["resource_id"],
-                        resource_type=r["resource_type"],
-                        category=r["category"],
-                        recommendation=r["recommendation"],
-                        current_cost=r["current_cost"],
-                        optimized_cost=r["optimized_cost"],
-                        monthly_savings=r["monthly_savings"],
-                        annual_savings=r["annual_savings"],
-                        priority=r["priority"],
-                        status=r["status"],
-                        difficulty=r["difficulty"],
+            try:
+                raw_recs = cost_explorer_service.fetch_live_rightsizing_recommendations(aws_account)
+                recs_objs = []
+                for r in raw_recs:
+                    recs_objs.append(
+                        Recommendation(
+                            id=r["resource_id"],
+                            user_id=user_id,
+                            service=r["service"],
+                            resource_id=r["resource_id"],
+                            resource_type=r["resource_type"],
+                            category=r["category"],
+                            recommendation=r["recommendation"],
+                            current_cost=r["current_cost"],
+                            optimized_cost=r["optimized_cost"],
+                            monthly_savings=r["monthly_savings"],
+                            annual_savings=r["annual_savings"],
+                            priority=r["priority"],
+                            status=r["status"],
+                            difficulty=r["difficulty"],
+                        )
                     )
+                return recs_objs
+            except Exception as e:
+                logger.warning("Failed to fetch live recommendations: %s. Falling back to local demo recommendations.", e)
+                return (
+                    self.db.query(Recommendation)
+                    .filter(Recommendation.user_id == user_id)
+                    .all()
                 )
-            return recs_objs
 
     def get_recommendation_summary(self, user_id: str) -> dict:
         user = self.db.query(User).filter(User.id == user_id).first()
@@ -118,8 +125,16 @@ class RecommendationService:
                     "by_status": {},
                 }
             from app.services.aws_cost_explorer import cost_explorer_service
-            raw_recs = cost_explorer_service.fetch_live_rightsizing_recommendations(aws_account)
-            recs = [Recommendation(user_id=user_id, **r) for r in raw_recs]
+            try:
+                raw_recs = cost_explorer_service.fetch_live_rightsizing_recommendations(aws_account)
+                recs = [Recommendation(user_id=user_id, **r) for r in raw_recs]
+            except Exception as e:
+                logger.warning("Failed to fetch live recommendations for summary: %s. Falling back to local demo recommendations.", e)
+                recs = (
+                    self.db.query(Recommendation)
+                    .filter(Recommendation.user_id == user_id)
+                    .all()
+                )
 
         total_monthly = sum(
             r.monthly_savings for r in recs if r.status in ["pending", "accepted"]

@@ -54,25 +54,20 @@ class User(Base, TimestampMixin):
 
     @property
     def is_demo_mode(self) -> bool:
-        from app.core.config import get_settings
-        settings = get_settings()
         # If they connected a real, active AWS account (not a seeded demo one), they are NOT in demo mode
         if self.organization:
             real_accounts = [acc for acc in self.organization.aws_accounts if acc.is_active and not getattr(acc, "is_demo", False)]
             if real_accounts:
                 return False
-        # Otherwise, they are in demo mode if environment is development/debug or email is in reviewer list
-        if settings.ENVIRONMENT == "development" or settings.DEBUG:
-            return True
-        return self.email.lower() in settings.reviewer_emails_list
+        # Otherwise, they are in demo mode!
+        return True
 
     @property
     def is_aws_connected(self) -> bool:
-        if self.is_demo_mode:
-            return True
         if not self.organization:
             return False
-        return any(acc.is_active for acc in self.organization.aws_accounts)
+        # Returns True only if they have connected a real, active AWS account
+        return any(acc.is_active and not getattr(acc, "is_demo", False) for acc in self.organization.aws_accounts)
 
     def __repr__(self) -> str:
         return f"<User {self.email}>"

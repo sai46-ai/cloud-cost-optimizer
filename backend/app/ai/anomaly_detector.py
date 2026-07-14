@@ -144,9 +144,18 @@ class AnomalyDetector:
             today = date.today()
             start_date = today - timedelta(days=30)
             from app.services.aws_cost_explorer import cost_explorer_service
-            records = cost_explorer_service.get_live_costs(aws_account, start_date, today)
-
-            return self._run_detection_on_records(records, contamination)
+            try:
+                records = cost_explorer_service.get_live_costs(aws_account, start_date, today)
+                return self._run_detection_on_records(records, contamination)
+            except Exception as e:
+                logger.warning("Failed to fetch live costs for anomaly detection: %s. Falling back to local demo records.", e)
+                records = (
+                    self.db.query(CostRecord)
+                    .filter(CostRecord.user_id == user_id)
+                    .order_by(CostRecord.date)
+                    .all()
+                )
+                return self._run_detection_on_records(records, contamination)
 
     def get_anomalies(self, user_id: str, limit: int = 50) -> List[Anomaly]:
         user = self.db.query(User).filter(User.id == user_id).first()
